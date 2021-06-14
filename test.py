@@ -44,84 +44,13 @@ class DataSet():
 
 
 ########################################################################################################################
-# Defining network
-# State = preAct
-# nbits on which to code the states
-nbits = 8
+x = np.linspace(-1, 1, 2000)
+n = 6
+y = np.clip(np.floor(2**(n-1) * x), -2**(n-1), 2**(n-1) - 1)
+print(y)
 
-# Parameters
-layersList = list(reversed([784, 512, 10]))
-T = 10 # steps of free phase
-
-# Defining the weights of the network
-W = nn.ModuleList(None)
-alphas = []
-
-with torch.no_grad():
-    for layer in range(len(layersList) - 1):
-        W.extend([nn.Linear(layersList[layer + 1], layersList[layer], bias=False)])
-        alphas.append(int((0.5 / np.sqrt(layersList[layer + 1])) * (2**nbits - 1)))
-
-        W[-1].weight.data = (alphas[-1] * torch.sign(W[-1].weight)).int()
+plt.plot(x, y)
+plt.show()
 
 
-def initHidden(data):
-    state = []
-    size = data.shape[0]
 
-    for layer in range(len(layersList)):
-        state.append(torch.zeros(size, layersList[layer], requires_grad=False))
-
-    # We initialize the first neurons with the input data
-    state[-1] = torch.mul(data, 2**nbits - 1).float()
-
-    return state
-
-
-def activ(state):
-    return (state >= 2**(nbits - 1)).int()
-
-
-def activP(state):
-    return ((state >= 0 ) & (state <= 2**nbits - 1)).int()
-
-
-def getAct(state):
-    binState = state.copy()
-
-    for layer in range(len(state) - 1):
-        binState[layer] = activ(state[layer])
-
-    binState[-1] = state[-1]
-
-    return binState
-
-
-def stepper(state):
-    preAct = state.copy()
-    binState = getAct(state)
-
-    # We compute the pre-activation for each layer
-    preAct[0] = activP(state[0]) * W[0](binState[1])
-
-    for layer in range(1, len(state) - 1):
-        # Previous layer contribution
-        preAct[layer] = activP(state[layer]) * W[layer](binState[layer + 1])
-        # Next layer contribution
-        preAct[layer] += activP(state[layer]) * torch.mm(binState[layer - 1], W[layer - 1].weight)
-        # Updating, filtering, and clamping the pre-activations
-        state[layer] = (0.5 * (state[layer] + preAct[layer])).int().clamp(0, 2**nbits - 1)
-
-    state[0] = 0.5 * (state[0] + preAct[0]).int().clamp(0, 2**nbits - 1) # Right shift + clamp
-
-    return state
-
-
-if __name__ == '__main__':
-    trainLoader = torch.utils.data.DataLoader(torch.utils.data.Subset(DataSet(args)(), [0]), batch_size=1, shuffle=False)
-    _, (data, target) = (next(iter(enumerate(trainLoader))))
-    state = initHidden(data)
-
-    with torch.no_grad():
-        for i in range(T):
-            state = stepper(state)
