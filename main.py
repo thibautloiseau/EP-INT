@@ -25,7 +25,7 @@ parser.add_argument(
     '--layersList',
     nargs='+',
     type=int,
-    default=[784, 4096, 10],
+    default=[784, 2048, 2048, 10],
     help='List of layer sizes (default: 1 fc hidden layers (4096))')
 parser.add_argument(
     '--trainBatchSize',
@@ -68,13 +68,13 @@ parser.add_argument(
     '--gamma',
     nargs='+',
     type=float,
-    default=[1, 1],
+    default=[2, 2, 2],
     help='Low-pass filter constant')
 parser.add_argument(
     '--tau',
     nargs='+',
     type=float,
-    default=[1, 1],
+    default=[1, 1, 1],
     help='Thresholds used for the binary optimization in BOP')
 # Training settings
 parser.add_argument(

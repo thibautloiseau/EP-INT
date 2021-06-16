@@ -48,139 +48,105 @@ def main1():
     Nin = 784.
     Nout = 10.
 
-    nbits = np.arange(1., 16.)
+    n = np.arange(1, 20)
 
-    def mini(Nin=Nin, Nout=Nout, nbits=nbits):
-        return ((-3 * 2**(nbits-1) + 1) / (Nin + Nout)).astype(int)
+    def overflow():
+        return ((3 * 2**(n-1) - 2) / (Nin + Nout)).astype(int)
 
-    def maxi(Nin=Nin, Nout=Nout, nbits=nbits):
-        return ((3 * 2**(nbits-1) - 2) / (Nin + Nout)).astype(int)
+    def alpha():
+        return (1 / (2 * np.sqrt(Nin)) * (2**(n-1) - 1)).astype(int)
 
-    ymin = mini()
-    ymax = maxi()
+    over = overflow()
+    alphas = alpha()
 
-    plt.plot(nbits, ymin)
-    plt.plot(nbits, ymax)
+    plt.plot(n, over, 'b', label='Max alpha for overflow')
+    plt.plot(n, alphas, 'r', label='Ideal alpha')
+    plt.xlabel('Number of bits')
+    plt.ylabel('Values of alpha')
+    plt.legend()
     plt.show()
 
 # main1()
 
 ########################################################################################################################
 # Test on stepper
-# Creating network
+
 def main2():
     args.layersList.reverse()
-    for i in range(10):
-        net = FCbinWAInt(args)
-        # Creating dataloaders only for training first
-        trainLoader, _ = Data_Loader(args)()
+    # for i in range(10):
+    net = FCbinWAInt(args)
+    # Creating dataloaders only for training first
+    trainLoader, _ = Data_Loader(args)()
 
-        if net.cuda:
-            net.to(net.device)
+    if net.cuda:
+        net.to(net.device)
 
-        batch_idx, (data, targets) = next(iter(enumerate(trainLoader)))
+    batch_idx, (data, targets) = next(iter(enumerate(trainLoader)))
 
-        # We initialize the first layer with input data
-        state = net.initHidden(data)
+    # We initialize the first layer with input data
+    state = net.initHidden(data)
 
-        # Sending tensors to GPU if available
-        if net.cuda:
-            targets = targets.to(net.device)
-            net.beta = net.beta.to(net.device)
+    # Sending tensors to GPU if available
+    if net.cuda:
+        targets = targets.to(net.device)
+        net.beta = net.beta.to(net.device)
 
-            for i in range(len(state)):
-                state[i] = state[i].to(net.device)
+        for i in range(len(state)):
+            state[i] = state[i].to(net.device)
 
-        # Keep track of the states during free phase to see evolution
-        # For output
-        saveO = [state[0][0][5].item()]
+    # Keep track of the states during free phase to see evolution
+    # For output
 
-        # For hidden
-        saveH = [state[1][0][100].item()]
+    save = []
 
-        # Free phase
-        T = 10
+    for k in range(len(state) - 1):
+        save.append([])
+        save[-1].append(state[k][0][7].item())
 
-        for step in range(T):
-            state = net.stepper(state)
+    #####
+    # Free phase
+    T = 10
 
-            saveO.append(state[0][0][5].item())
-            saveH.append(state[1][0][100].item())
+    for step in range(T):
+        state = net.stepper(state)
 
-        freeState = state.copy()
+        for k in range(len(state) - 1):
+            save[k].append(state[k][0][7].item())
 
-        # plt.plot(range(T + 1), saveO)
-        # plt.plot(range(T + 1), saveH, 'b')
-        # plt.show()
+    freeState = state.copy()
 
-        # Nudged phase
-        Kmax = 12
-        beta = 2
+    #####
+    # Nudged phase
+    Kmax = 12
+    beta = 2
 
-        for step in range(Kmax):
-            state = net.stepper(state, target=targets, beta=beta)
-            saveO.append(state[0][0][5].item())
-            saveH.append(state[1][0][100].item())
+    for step in range(Kmax):
+        state = net.stepper(state, target=targets, beta=beta)
+        for k in range(len(state) - 1):
+            save[k].append(state[k][0][7].item())
 
-        nudgedState = state.copy()
+    # Plotting state evolution
+    # For first hidden layer in [0, 1]
+    for k in range(1):
+        plt.plot(range(T + 1 + Kmax), save[k])
+    # plt.show()
 
-        plt.plot(range(T + 1 + Kmax), saveO)
-        plt.plot(range(T + 1 + Kmax), saveH)
-        plt.show()
+    # For next layers in [0, 2**(n-1) - 1]
+    for k in range(1, 3):
+        plt.plot(range(T + 1 + Kmax), save[k])
+    # plt.show()
 
-        # Compute gradients
-        coef = int(((1 / (beta * data.shape[0])) * net.maxInt))
-        gradW = []
+    # We compute the gradient
+    # gradW, _, _ = net.computeGradients(freeState, state)
 
-        with torch.no_grad():
-            # We get the binary states of each neuron
-            freeBinState, nudgedBinState = net.getBinState(freeState), net.getBinState(nudgedState)
+    freeBinState = net.getBinState(freeState)
+    nudgedBinState = net.getBinState(state)
 
-            for layer in range(len(freeState) - 1):
-                gradW.append(coef * (
-                        torch.mm(torch.transpose(nudgedBinState[layer], 0, 1), nudgedBinState[layer + 1]) -
-                        torch.mm(torch.transpose(freeBinState[layer], 0, 1), freeBinState[layer + 1])
-                ))
-
-            # We initialize the accumulated gradients for first iteration
-            if net.accGradients == []:
-                net.accGradients = [net.gamma[i] * w for (i, w) in enumerate(gradW)]
-
-            # We compute momentum with BOP algorithm if we already have gradients
-            else:
-                net.accGradients = [torch.add(net.gamma[i] * g, (1 - net.gamma[i]) * m) for i, (m, g) in enumerate(zip(net.accGradients, gradW))]
-
-            gradW = net.accGradients
-
-        # Updating weights
-        with torch.no_grad():
-            for layer in range(len(freeState) - 1):
-                tauTensor = net.tau[layer] * torch.ones(net.W[layer].weight.shape).to(net.device)
-                modifyWeights = -1 * torch.sign( (-1 * torch.sign(net.W[layer].weight) * gradW[layer] > tauTensor).int() - 0.5)
-                net.W[layer].weight.data = torch.mul(net.W[layer].weight.data, modifyWeights)
+    for i in range(len(state)):
+        print('layer ' + str(i))
+        print(torch.count_nonzero(freeBinState[i][52]).item())
 
 main2()
 
 ########################################################################################################################
-# Testing for input layer
 
-def main3():
-    n = np.arange(2, 25)
-    Nin = 784
-    Nout = 10
-
-    def mini1(n=n, Nin=Nin, Nout=Nout):
-        return ((2**n + 2**(n-1) - 1 - Nout * ((3 * 2**(n-1) - 2) / (Nin + Nout)).astype(int)) / (Nin * 2**(n-1))).astype(int)
-
-    def mini2(n=n, Nin=Nin, Nout=Nout):
-
-        return ((2**n + 2**(n-1) - 2 - Nout * ((3 * 2**(n-1) - 2) / (Nin + Nout)).astype(int)) / (Nin * (2**(n-1) - 1))).astype(int)
-
-
-    y1 = mini1()
-    y2 = mini2()
-    # plt.plot(n, y1)
-    plt.plot(n, y2)
-    plt.show()
-
-# main3()
