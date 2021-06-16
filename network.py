@@ -46,8 +46,10 @@ class FCbinWAInt(nn.Module):
         self.lrAlpha = args.lrAlpha
 
         # Int coding
-        self.minInt = 0
-        self.maxInt = 2**args.nbBits - 1
+        self.nbBits = args.nbBits
+        self.minInt = -2**(self.nbBits - 1)
+        self.maxInt = 2**(self.nbBits - 1) - 1
+        self.activateInputs = args.activateInputs
 
         # Initialize the accumulated gradients for the batch and the scaling factors
         self.accGradients = []
@@ -63,9 +65,10 @@ class FCbinWAInt(nn.Module):
                 else:
                     self.W.extend([nn.Linear(self.layersList[i+1], self.layersList[i], bias=False)])
 
-                alpha = int((0.5 / np.sqrt(self.layersList[i+1])) * (self.maxInt))
+                # alpha = int((3 * 2**(self.nbBits - 1) - 2) / (self.layersList[i] + self.layersList[i+1]))
+                alpha = 1
                 self.alphas.append(alpha)
-                self.W[-1].weight.data = alpha * torch.sign(self.W[-1].weight)
+                self.W[-1].weight.data = (alpha * torch.sign(self.W[-1].weight)).int().float()
 
     def initHidden(self, data):
         """Initialize the neurons"""
@@ -76,32 +79,37 @@ class FCbinWAInt(nn.Module):
             state.append(torch.zeros(size, self.layersList[layer], requires_grad=False))
 
         # We initialize the first neurons with the input data
-        state[-1] = data.float()
+        state[-1] = (self.maxInt * data).int().float()
 
         return state
+
+    def activ(self, x):
+        """Activation function for neurons"""
+        return (x >= 2**(self.nbBits - 2)).int().float()
+
+    def activP(self, x):
+        """Derivative of activation functions for neurons"""
+        return ((x >= 0) & (x <= self.maxInt)).int().float()
 
     def getBinState(self, state):
         binState = state.copy()
 
-        for layer in range(len(state) - 1):
+        for layer in range(len(state)):
             binState[layer] = self.activ(state[layer])
 
-        binState[-1] = state[-1]
+        if not self.activateInputs:
+            binState[-1] = state[-1]
 
         return binState
-
-    def activ(self, x):
-        """Activation function for neurons"""
-        return (x >= 0.5).float()
-
-    def activP(self, x):
-        """Derivative of activation functions for neurons"""
-        return ((x >= 0) & (x <= 1)).float()
 
     def stepper(self, state, target=None, beta=0):
         """Evolution of the state during free phase or nudged phase"""
         preAct = state.copy()
         binState = self.getBinState(state)
+
+        # We transform the target into an int of the good size
+        if target != None:
+            target = (self.maxInt * target).int().float()
 
         # We compute the pre-activation for each layer
         preAct[0] = self.activP(state[0]) * self.W[0](binState[1])
@@ -115,9 +123,11 @@ class FCbinWAInt(nn.Module):
             # Next layer contribution
             preAct[layer] += self.activP(state[layer]) * torch.mm(binState[layer - 1], self.W[layer - 1].weight)
             # Updating, filtering, and clamping the pre-activations
-            state[layer] = (0.5 * (state[layer] + preAct[layer])).clamp(0, 1)
+            # state[layer] = (0.5 * (state[layer] + preAct[layer])).clamp(0, self.maxInt)
+            state[layer] = (0.5 * (state[layer] + preAct[layer])).int().float().clamp(0, self.maxInt)
 
-        state[0] = 0.5 * (state[0] + preAct[0]).clamp(0, 1)
+        # state[0] = 0.5 * (state[0] + preAct[0]).clamp(0, self.maxInt)
+        state[0] = (0.5 * (state[0] + preAct[0])).int().float().clamp(0, self.maxInt)
 
         return state
 
@@ -138,7 +148,7 @@ class FCbinWAInt(nn.Module):
 
     def computeGradients(self, freeState, nudgedState):
         """Compute the gradients for the considered batch, according to all learnable parameters"""
-        coef = 1 / (self.beta * self.trainBatchSize)
+        coef = int(((1 / (self.beta * self.trainBatchSize)) * self.maxInt))
         gradW, gradBias, gradAlpha = [], [], []
 
         with torch.no_grad():
@@ -150,6 +160,7 @@ class FCbinWAInt(nn.Module):
                         torch.mm(torch.transpose(nudgedBinState[layer], 0, 1), nudgedBinState[layer + 1]) -
                         torch.mm(torch.transpose(freeBinState[layer], 0, 1), freeBinState[layer + 1])
                 ))
+
                 if self.hasBias:
                     gradBias.append(coef * (nudgedBinState[layer] - freeBinState[layer]).sum(0))
 

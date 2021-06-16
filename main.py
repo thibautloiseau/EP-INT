@@ -26,7 +26,7 @@ parser.add_argument(
     nargs='+',
     type=int,
     default=[784, 4096, 10],
-    help='List of layer sizes (default: 2 fc hidden layers (4096))')
+    help='List of layer sizes (default: 1 fc hidden layers (4096))')
 parser.add_argument(
     '--trainBatchSize',
     type=int,
@@ -45,7 +45,7 @@ parser.add_argument(
 parser.add_argument(
     '--T',
     type=int,
-    default=250,
+    default=10,
     metavar='T',
     help='Number of time steps in the free phase (default: 50)')
 parser.add_argument(
@@ -57,30 +57,30 @@ parser.add_argument(
 parser.add_argument(
     '--beta',
     type=float,
-    default=0.3,
+    default=2,
     help='nudging parameter (default: 1)')
 parser.add_argument(
     '--randomBeta',
     type=int,
-    default=1,
+    default=0,
     help='Use random sign of beta for training or fixed >0 sign (default: 1, other: 0)')
 parser.add_argument(
     '--gamma',
     nargs='+',
     type=float,
-    default=[5e-6, 2e-5, 2e-5],
+    default=[1, 1],
     help='Low-pass filter constant')
 parser.add_argument(
     '--tau',
     nargs='+',
     type=float,
-    default=[5e-7, 5e-7, 5e-7],
+    default=[1, 1],
     help='Thresholds used for the binary optimization in BOP')
 # Training settings
 parser.add_argument(
     '--hasBias',
     type=int,
-    default=1,
+    default=0,
     help='Does the network has bias ? (default: 1, other: 0)')
 parser.add_argument(
     '--lrBias',
@@ -98,7 +98,7 @@ parser.add_argument(
 parser.add_argument(
     '--learnAlpha',
     type=int,
-    default=1,
+    default=0,
     help='Learn the scaling factors or let them fixed (default: 1, other: 0)')
 parser.add_argument(
     '--lrAlpha',
@@ -109,8 +109,13 @@ parser.add_argument(
 parser.add_argument(
     '--nbBits',
     type=int,
-    default=8,
-    help='Number of bits for states in int coding')
+    default=15,
+    help='Number of bits for states in signed int coding')
+parser.add_argument(
+    '--activateInputs',
+    type=int,
+    default=0,
+    help='Chose if we want to activate the inputs or not')
 
 args = parser.parse_args()
 
