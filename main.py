@@ -6,6 +6,11 @@ from network import *
 
 parser = argparse.ArgumentParser(description='Binary Equilibrium Propagation')
 
+# For 1 hiddent layer with augmented output
+# --device 0 --dataset MNIST --archi fc --binarySettings WA --layersList 784 8192 100 --expandOutput 10 --T 20 --Kmax 10
+# --beta 2 --randomBeta 1 --gamma 2e-6 2e-6 --tau 2.5e-7 2e-7 --lrBias 1e-7 1e-7 --trainBatchSize 64 --testBatchSize 512
+# --epochs 100 --learnAlpha 0
+
 parser.add_argument(
     '--dataset',
     type=str,
@@ -25,8 +30,13 @@ parser.add_argument(
     '--layersList',
     nargs='+',
     type=int,
-    default=[784, 2048, 2048, 10],
+    default=[784, 8192, 100],
     help='List of layer sizes (default: 1 fc hidden layers (4096))')
+parser.add_argument(
+    '--expandOutput',
+    type=int,
+    default=10,
+    help='Quantity by how much we expand the ouput layer)')
 parser.add_argument(
     '--trainBatchSize',
     type=int,
@@ -38,14 +48,9 @@ parser.add_argument(
     default=512,
     help='Testing B0atch size (default=512)')
 parser.add_argument(
-    '--expandOutput',
-    type=int,
-    default=1,
-    help='Quantity by how much we expand the ouput layer)')
-parser.add_argument(
     '--T',
     type=int,
-    default=10,
+    default=20,
     metavar='T',
     help='Number of time steps in the free phase (default: 50)')
 parser.add_argument(
@@ -62,20 +67,32 @@ parser.add_argument(
 parser.add_argument(
     '--randomBeta',
     type=int,
-    default=0,
+    default=1,
     help='Use random sign of beta for training or fixed >0 sign (default: 1, other: 0)')
 parser.add_argument(
     '--gamma',
     nargs='+',
     type=float,
-    default=[2, 2, 2],
-    help='Low-pass filter constant')
+    default=[2e-6, 2e-6],
+    help='Low-pass filter constant of BOP for full precision layers')
 parser.add_argument(
     '--tau',
     nargs='+',
     type=float,
-    default=[1, 1, 1],
-    help='Thresholds used for the binary optimization in BOP')
+    default=[2.5e-7, 2e-7],
+    help='Thresholds used for the binary optimization in BOP for full precision layers')
+parser.add_argument(
+    '--gammaInt',
+    nargs='+',
+    type=float,
+    default=[2, 2],
+    help='Low-pass filter constant of BOP for int layers')
+parser.add_argument(
+    '--tauInt',
+    nargs='+',
+    type=float,
+    default=[1, 1],
+    help='Thresholds used for the binary optimization in BOP for int layers')
 # Training settings
 parser.add_argument(
     '--hasBias',
@@ -87,11 +104,11 @@ parser.add_argument(
     nargs='+',
     type=float,
     default=[0.025, 0.05, 0.1],
-    help='learning rates for bias')
+    help='Learning rates for bias')
 parser.add_argument(
     '--epochs',
     type=int,
-    default=50,
+    default=100,
     metavar='N',
     help='number of epochs to train (default: 2)')
 # Learning the scaling factor
@@ -109,7 +126,7 @@ parser.add_argument(
 parser.add_argument(
     '--nbBits',
     type=int,
-    default=15,
+    default=13,
     help='Number of bits for states in signed int coding')
 parser.add_argument(
     '--activateInputs',

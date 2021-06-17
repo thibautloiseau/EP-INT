@@ -1,3 +1,5 @@
+import numpy as np
+
 from main import *
 import matplotlib.pyplot as plt
 import pickle
@@ -73,80 +75,130 @@ def main1():
 
 def main2():
     args.layersList.reverse()
-    # for i in range(10):
-    net = FCbinWAInt(args)
-    # Creating dataloaders only for training first
-    trainLoader, _ = Data_Loader(args)()
+    for i in range(10):
+        net = FCbinWAInt(args)
+        # Creating dataloaders only for training first
+        trainLoader, _ = Data_Loader(args)()
 
-    if net.cuda:
-        net.to(net.device)
+        if net.cuda:
+            net.to(net.device)
 
-    batch_idx, (data, targets) = next(iter(enumerate(trainLoader)))
+        batch_idx, (data, targets) = next(iter(enumerate(trainLoader)))
 
-    # We initialize the first layer with input data
-    state = net.initHidden(data)
+        # We initialize the first layer with input data
+        state = net.initHidden(data)
 
-    # Sending tensors to GPU if available
-    if net.cuda:
-        targets = targets.to(net.device)
-        net.beta = net.beta.to(net.device)
+        # Sending tensors to GPU if available
+        if net.cuda:
+            targets = targets.to(net.device)
+            net.beta = net.beta.to(net.device)
 
-        for i in range(len(state)):
-            state[i] = state[i].to(net.device)
+            for i in range(len(state)):
+                state[i] = state[i].to(net.device)
 
-    # Keep track of the states during free phase to see evolution
-    # For output
+        # Keep track of the states during free phase to see evolution
+        # For output
 
-    save = []
-
-    for k in range(len(state) - 1):
-        save.append([])
-        save[-1].append(state[k][0][7].item())
-
-    #####
-    # Free phase
-    T = 10
-
-    for step in range(T):
-        state = net.stepper(state)
+        save = []
 
         for k in range(len(state) - 1):
-            save[k].append(state[k][0][7].item())
+            save.append([])
+            save[-1].append(state[k][0][7].item())
 
-    freeState = state.copy()
+        #####
+        # Free phase
+        T = 10
 
-    #####
-    # Nudged phase
-    Kmax = 12
-    beta = 2
+        for step in range(T):
+            state = net.stepper(state)
 
-    for step in range(Kmax):
-        state = net.stepper(state, target=targets, beta=beta)
-        for k in range(len(state) - 1):
-            save[k].append(state[k][0][7].item())
+            for k in range(len(state) - 1):
+                save[k].append(state[k][0][7].item())
 
-    # Plotting state evolution
-    # For first hidden layer in [0, 1]
-    for k in range(1):
-        plt.plot(range(T + 1 + Kmax), save[k])
-    # plt.show()
+        freeState = state.copy()
 
-    # For next layers in [0, 2**(n-1) - 1]
-    for k in range(1, 3):
-        plt.plot(range(T + 1 + Kmax), save[k])
-    # plt.show()
+        # See evolution of free state
+        for k in range(len(freeState) - 1):
+            print(k)
+            print(save[k])
+        #     plt.plot(range(T + 1), save[k])
+        # plt.show()
+
+        #####
+        # Nudged phase
+        # Kmax = 12
+        # beta = 2
+        #
+        # for step in range(Kmax):
+        #     state = net.stepper(state, target=targets, beta=beta)
+        #     for k in range(len(state) - 1):
+        #         save[k].append(state[k][0][7].item())
+        #
+        # # Plotting state evolution
+        # # For first hidden layer in [0, 1]
+        # for k in range(1):
+        #     plt.plot(range(T + 1 + Kmax), save[k])
+        # plt.show()
+        #
+        # # For next layers in [0, 2**(n-1) - 1]
+        # for k in range(1, 3):
+        #     plt.plot(range(T + 1 + Kmax), save[k])
+        # plt.show()
+
+
 
     # We compute the gradient
     # gradW, _, _ = net.computeGradients(freeState, state)
+    #
+    # freeBinState = net.getBinState(freeState)
+    # nudgedBinState = net.getBinState(state)
 
-    freeBinState = net.getBinState(freeState)
-    nudgedBinState = net.getBinState(state)
+    # for i in range(len(state)):
+    #     print('layer ' + str(i))
+    #     print(torch.count_nonzero(freeBinState[i][52]).item())
 
-    for i in range(len(state)):
-        print('layer ' + str(i))
-        print(torch.count_nonzero(freeBinState[i][52]).item())
-
-main2()
+# main2()
 
 ########################################################################################################################
+# See initialized int weights
 
+def main3():
+    net = FCbinWAInt(args)
+
+    for i in range(len(net.Wint)):
+        print(net.Wint[i].weight)
+        print(net.W[i].weight)
+
+# main3()
+
+########################################################################################################################
+# Seeing number of bits for which to code BOP parameters
+
+def main4():
+    n = np.arange(2, 25)
+
+    def scaling():
+        return (2e-7 * (2**(n-1))).astype(int)
+
+    y = scaling()
+    plt.plot(n, y)
+    plt.show()
+
+# main4()
+
+########################################################################################################################
+# Numbers of bit with alpha
+
+def main5():
+    n = np.arange(2, 16)
+    Nin = 8192
+
+    def scaling():
+        return (1 / (2*np.sqrt(Nin)) * (2**(n-1))).astype(int)
+
+    y = scaling()
+    print(y)
+    plt.plot(n, y)
+    plt.show()
+
+main5()
