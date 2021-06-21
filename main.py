@@ -70,40 +70,28 @@ parser.add_argument(
     default=1,
     help='Use random sign of beta for training or fixed >0 sign (default: 1, other: 0)')
 parser.add_argument(
-    '--gamma',
-    nargs='+',
-    type=float,
-    default=[2e-6, 2e-6],
-    help='Low-pass filter constant of BOP for full precision layers')
-parser.add_argument(
-    '--tau',
-    nargs='+',
-    type=float,
-    default=[2.5e-7, 2e-7],
-    help='Thresholds used for the binary optimization in BOP for full precision layers')
-parser.add_argument(
     '--gammaInt',
     nargs='+',
     type=float,
-    default=[2, 2],
-    help='Low-pass filter constant of BOP for int layers')
+    default=[4, 4],
+    help='Low-pass filter constant of BOP for int layers, a power of 2')
 parser.add_argument(
     '--tauInt',
     nargs='+',
     type=float,
-    default=[1, 1],
+    default=[20, 40],
     help='Thresholds used for the binary optimization in BOP for int layers')
 # Training settings
 parser.add_argument(
     '--hasBias',
     type=int,
-    default=0,
+    default=1,
     help='Does the network has bias ? (default: 1, other: 0)')
 parser.add_argument(
     '--lrBias',
     nargs='+',
     type=float,
-    default=[0.025, 0.05, 0.1],
+    default=[1, 1],
     help='Learning rates for bias')
 parser.add_argument(
     '--epochs',
@@ -128,11 +116,6 @@ parser.add_argument(
     type=int,
     default=13,
     help='Number of bits for states in signed int coding')
-parser.add_argument(
-    '--activateInputs',
-    type=int,
-    default=0,
-    help='Chose if we want to activate the inputs or not')
 
 args = parser.parse_args()
 
@@ -140,56 +123,58 @@ if __name__ == '__main__':
     # We reverse the layersList according to the convention that the output is 0 indexed
     args.layersList.reverse()
 
-    # Initializing the data and the network
-    trainLoader, testLoader = Data_Loader(args)()
+    for i in range(20, 35):
+        args.tauInt = [i, 40]
+        # Initializing the data and the network
+        trainLoader, testLoader = Data_Loader(args)()
 
-    net = FCbinWAInt(args)
+        net = FCbinWAInt(args)
 
-    # Create visualizer for tensorboard and save training
-    visualizer = Visualizer(net, args)
-    visualizer.saveHyperParameters()
+        # Create visualizer for tensorboard and save training
+        visualizer = Visualizer(net, args)
+        visualizer.saveHyperParameters()
 
-    if net.cuda:
-        net.to(net.device)
+        if net.cuda:
+            net.to(net.device)
 
-    print("Running on " + net.deviceName)
+        print("Running on " + net.deviceName)
 
-    # Training and testing the network
-    for epoch in tqdm(range(args.epochs)):
-        print("\nStarting epoch " + str(epoch + 1) + "/" + str(args.epochs))
+        # Training and testing the network
+        for epoch in tqdm(range(args.epochs)):
+            print("\nStarting epoch " + str(epoch + 1) + "/" + str(args.epochs))
 
-        # Training
-        print("Training")
-        nbChanges, aveTrainError, singleTrainError, trainLoss, _ = trainFC(net, trainLoader, args)
+            # Training
+            print("Training")
+            nbChanges, aveTrainError, singleTrainError, trainLoss, _ = trainFC(net, trainLoader, args)
 
-        visualizer.addTraining(aveTrainError, singleTrainError, trainLoss, epoch)
-        visualizer.addNbChanges(nbChanges, epoch)
+            visualizer.addTraining(aveTrainError, singleTrainError, trainLoss, epoch)
+            visualizer.addNbChanges(nbChanges, epoch)
 
-        # Testing
-        print("Testing")
-        aveTestError, singleTestError, testLoss = testFC(net, testLoader, args)
-        visualizer.addTesting(aveTestError, singleTestError, testLoss, epoch)
+            # Testing
+            print("Testing")
+            aveTestError, singleTestError, testLoss = testFC(net, testLoader, args)
+            visualizer.addTesting(aveTestError, singleTestError, testLoss, epoch)
 
-        print("Training loss: " + str(trainLoss))
-        print("Average training error: " + str(aveTrainError))
-        print("Single training error: " + str(singleTrainError))
+            print("Training loss: " + str(trainLoss))
+            print("Average training error: " + str(aveTrainError))
+            print("Single training error: " + str(singleTrainError))
 
-        print("Testing loss: " + str(testLoss))
-        print("Average testing error: " + str(aveTestError))
-        print("Single testing error: " + str(singleTestError))
+            print("Testing loss: " + str(testLoss))
+            print("Average testing error: " + str(aveTestError))
+            print("Single testing error: " + str(singleTestError))
 
-        # Save checkpoint after epoch
-        print("Saving checkpoint")
+            # Save checkpoint after epoch
+            print("Saving checkpoint")
 
-        torch.save({
-            'epoch': epoch,
-            'modelStateDict': net.state_dict(),
-            'trainLoss': trainLoss,
-            'aveTrainError': aveTrainError,
-            'testLoss': testLoss,
-            'aveTestError': aveTestError,
-        }, os.path.join(visualizer.path, 'checkpoint.pt'))
+            torch.save({
+                'epoch': epoch,
+                'modelStateDict': net.state_dict(),
+                'trainLoss': trainLoss,
+                'aveTrainError': aveTrainError,
+                'testLoss': testLoss,
+                'aveTestError': aveTestError,
+            }, os.path.join(visualizer.path, 'checkpoint.pt'))
 
-    print("Finished training")
+        print("Finished training")
 
 

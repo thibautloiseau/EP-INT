@@ -33,25 +33,27 @@ class Data_Loader(DataLoader):
         self.testBatchSize = args.testBatchSize
         self.fcTransforms = [transforms.ToTensor(), ReshapeTransform((-1,))]
         self.expandOutput = args.expandOutput
+        self.dataset = args.dataset
 
     def __call__(self):
         """We return a tuple with both dataloader for train and test"""
-        return (
-            DataLoader(
-                datasets.MNIST(
-                    root='./data', train=True, download=True,
-                    transform=transforms.Compose(self.fcTransforms),
-                    target_transform=ReshapeTransformTarget(10, self.expandOutput)
+        if self.dataset == 'MNIST':
+            return (
+                DataLoader(
+                    datasets.MNIST(
+                        root='./data', train=True, download=True,
+                        transform=transforms.Compose(self.fcTransforms),
+                        target_transform=ReshapeTransformTarget(10, self.expandOutput)
+                    ),
+                    shuffle=True, batch_size=self.trainBatchSize, num_workers=2, pin_memory=True
                 ),
-                shuffle=True, batch_size=self.trainBatchSize, num_workers=2, pin_memory=True
-            ),
 
-            DataLoader(
-                datasets.MNIST(
-                    root='./data', train=False, download=True,
-                    transform=transforms.Compose(self.fcTransforms),
-                    target_transform=ReshapeTransformTarget(10, self.expandOutput)
-                ),
-                shuffle=True, batch_size=self.testBatchSize, num_workers=2, pin_memory=True
+                DataLoader(
+                    datasets.MNIST(
+                        root='./data', train=False, download=True,
+                        transform=transforms.Compose(self.fcTransforms),
+                        target_transform=ReshapeTransformTarget(10, self.expandOutput)
+                    ),
+                    shuffle=True, batch_size=self.testBatchSize, num_workers=2, pin_memory=True
+                )
             )
-        )
