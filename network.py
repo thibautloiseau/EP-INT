@@ -27,8 +27,9 @@ class FCbinWAInt(nn.Module):
         self.Kmax = args.Kmax
         self.beta = torch.tensor(args.beta)
         self.randomBeta = args.randomBeta
+
         self.hasBias = args.hasBias
-        self.lrBias = args.lrBias
+        self.lrBias = [1 / args.lrBias[i] for i in range(len(args.lrBias))]
 
         # Batch sizes
         self.trainBatchSize = args.trainBatchSize
@@ -62,7 +63,6 @@ class FCbinWAInt(nn.Module):
             for i in range(len(self.layersList) - 1):
                 if self.hasBias:
                     self.W.extend([nn.Linear(self.layersList[i+1], self.layersList[i], bias=True)])
-                    self.W[-1].bias.data = torch.zeros(size=self.W[-1].bias.shape)
 
                 else:
                     self.W.extend([nn.Linear(self.layersList[i+1], self.layersList[i], bias=False)])
