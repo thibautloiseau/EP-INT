@@ -29,7 +29,8 @@ class FCbinWAInt(nn.Module):
         self.randomBeta = args.randomBeta
 
         self.hasBias = args.hasBias
-        self.lrBias = [1 / args.lrBias[i] for i in range(len(args.lrBias))]
+        # Right shift for the learning rates of biases
+        self.lrBias = [1 / 2**args.lrBias[i] for i in range(len(args.lrBias))]
 
         # Batch sizes
         self.trainBatchSize = args.trainBatchSize
@@ -47,10 +48,8 @@ class FCbinWAInt(nn.Module):
         self.maxInt = 2**(self.nbBits - 1) - 1
 
         # Parameters of BOP
-
-        # For int layers
-        # gammaInt is a division by 2^n -> right shift by n bits
-        self.gammaInt = [1 / args.gammaInt[i] for i in range(len(args.gammaInt))]
+        # Right shift for gammaInt, contribution of gradient and momentum in BOP algorithm
+        self.gammaInt = [1 / 2**args.gammaInt[i] for i in range(len(args.gammaInt))]
         self.tauInt = args.tauInt
 
         # Initialize the accumulated gradients for the batch and the scaling factors
@@ -63,6 +62,7 @@ class FCbinWAInt(nn.Module):
             for i in range(len(self.layersList) - 1):
                 if self.hasBias:
                     self.W.extend([nn.Linear(self.layersList[i+1], self.layersList[i], bias=True)])
+                    self.W[-1].bias.data = torch.zeros(size=self.W[-1].bias.data.shape)
 
                 else:
                     self.W.extend([nn.Linear(self.layersList[i+1], self.layersList[i], bias=False)])

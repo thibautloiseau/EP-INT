@@ -73,7 +73,7 @@ parser.add_argument(
     '--gammaInt',
     nargs='+',
     type=float,
-    default=[8, 8],
+    default=[4, 4],
     help='Low-pass filter constant of BOP for int layers, a power of 2')
 parser.add_argument(
     '--tauInt',
@@ -91,7 +91,7 @@ parser.add_argument(
     '--lrBias',
     nargs='+',
     type=float,
-    default=[16, 16],
+    default=[4, 4],
     help='Learning rates for bias')
 parser.add_argument(
     '--epochs',
@@ -123,56 +123,58 @@ if __name__ == '__main__':
     # We reverse the layersList according to the convention that the output is 0 indexed
     args.layersList.reverse()
 
-    # Initializing the data and the network
-    trainLoader, testLoader = Data_Loader(args)()
+    for i in range(5, 10):
+        args.lrBias = [i, i]
+        # Initializing the data and the network
+        trainLoader, testLoader = Data_Loader(args)()
 
-    net = FCbinWAInt(args)
+        net = FCbinWAInt(args)
 
-    # Create visualizer for tensorboard and save training
-    visualizer = Visualizer(net, args)
-    visualizer.saveHyperParameters()
+        # Create visualizer for tensorboard and save training
+        visualizer = Visualizer(net, args)
+        visualizer.saveHyperParameters()
 
-    if net.cuda:
-        net.to(net.device)
+        if net.cuda:
+            net.to(net.device)
 
-    print("Running on " + net.deviceName)
+        print("Running on " + net.deviceName)
 
-    # Training and testing the network
-    for epoch in tqdm(range(args.epochs)):
-        print("\nStarting epoch " + str(epoch + 1) + "/" + str(args.epochs))
+        # Training and testing the network
+        for epoch in tqdm(range(args.epochs)):
+            print("\nStarting epoch " + str(epoch + 1) + "/" + str(args.epochs))
 
-        # Training
-        print("Training")
-        nbChanges, aveTrainError, singleTrainError, trainLoss, _ = trainFC(net, trainLoader, args)
+            # Training
+            print("Training")
+            nbChanges, aveTrainError, singleTrainError, trainLoss, _ = trainFC(net, trainLoader, args)
 
-        visualizer.addTraining(aveTrainError, singleTrainError, trainLoss, epoch)
-        visualizer.addNbChanges(nbChanges, epoch)
+            visualizer.addTraining(aveTrainError, singleTrainError, trainLoss, epoch)
+            visualizer.addNbChanges(nbChanges, epoch)
 
-        # Testing
-        print("Testing")
-        aveTestError, singleTestError, testLoss = testFC(net, testLoader, args)
-        visualizer.addTesting(aveTestError, singleTestError, testLoss, epoch)
+            # Testing
+            print("Testing")
+            aveTestError, singleTestError, testLoss = testFC(net, testLoader, args)
+            visualizer.addTesting(aveTestError, singleTestError, testLoss, epoch)
 
-        print("Training loss: " + str(trainLoss))
-        print("Average training error: " + str(aveTrainError))
-        print("Single training error: " + str(singleTrainError))
+            print("Training loss: " + str(trainLoss))
+            print("Average training error: " + str(aveTrainError))
+            print("Single training error: " + str(singleTrainError))
 
-        print("Testing loss: " + str(testLoss))
-        print("Average testing error: " + str(aveTestError))
-        print("Single testing error: " + str(singleTestError))
+            print("Testing loss: " + str(testLoss))
+            print("Average testing error: " + str(aveTestError))
+            print("Single testing error: " + str(singleTestError))
 
-        # Save checkpoint after epoch
-        print("Saving checkpoint")
+            # Save checkpoint after epoch
+            print("Saving checkpoint")
 
-        torch.save({
-            'epoch': epoch,
-            'modelStateDict': net.state_dict(),
-            'trainLoss': trainLoss,
-            'aveTrainError': aveTrainError,
-            'testLoss': testLoss,
-            'aveTestError': aveTestError,
-        }, os.path.join(visualizer.path, 'checkpoint.pt'))
+            torch.save({
+                'epoch': epoch,
+                'modelStateDict': net.state_dict(),
+                'trainLoss': trainLoss,
+                'aveTrainError': aveTrainError,
+                'testLoss': testLoss,
+                'aveTestError': aveTestError,
+            }, os.path.join(visualizer.path, 'checkpoint.pt'))
 
-    print("Finished training")
+        print("Finished training")
 
 
