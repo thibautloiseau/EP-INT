@@ -37,9 +37,6 @@ class FCbinWAInt(nn.Module):
         self.testBatchSize = args.testBatchSize
 
         # Scaling factors
-        self.alphas = []
-        self.learnAlpha = args.learnAlpha
-        self.lrAlpha = args.lrAlpha
         self.alphasInt = []
 
         # Int coding

@@ -67,7 +67,7 @@ parser.add_argument(
 parser.add_argument(
     '--randomBeta',
     type=int,
-    default=1,
+    default=0,
     help='Use random sign of beta for training or fixed >0 sign (default: 1, other: 0)')
 parser.add_argument(
     '--gammaInt',
@@ -100,17 +100,17 @@ parser.add_argument(
     metavar='N',
     help='Number of epochs to train (default: 100)')
 # Learning the scaling factor
-parser.add_argument(
-    '--learnAlpha',
-    type=int,
-    default=0,
-    help='Learn the scaling factors or let them fixed (default: 1, other: 0)')
-parser.add_argument(
-    '--lrAlpha',
-    nargs='+',
-    type=float,
-    default=[1, 1],
-    help='learning rates for the scaling factors')
+# parser.add_argument(
+#     '--learnAlpha',
+#     type=int,
+#     default=0,
+#     help='Learn the scaling factors or let them fixed (default: 1, other: 0)')
+# parser.add_argument(
+#     '--lrAlpha',
+#     nargs='+',
+#     type=float,
+#     default=[1, 1],
+#     help='learning rates for the scaling factors')
 parser.add_argument(
     '--nbBits',
     type=int,
