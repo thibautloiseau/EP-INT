@@ -14,15 +14,16 @@ class ReshapeTransform:
 
 class ReshapeTransformTarget:
     """Transform target output in the appropriate way"""
-    def __init__(self, noClasses, expandOutput):
+    def __init__(self, noClasses, expandOutput, nbBits):
         self.noClasses = noClasses
         self.expandOutput = expandOutput
+        self.nbBits = nbBits
 
     def __call__(self, target):
         target = torch.tensor(target).unsqueeze(0).unsqueeze(1)
         targetOneHot = torch.zeros((1, self.noClasses))
 
-        return targetOneHot.scatter_(1, target, 1).repeat_interleave(self.expandOutput).squeeze(0)
+        return targetOneHot.scatter_(1, target, 1).repeat_interleave(self.expandOutput).squeeze(0) * (2**(self.nbBits - 1) - 1)
 
 
 # For fc architecture
@@ -34,6 +35,7 @@ class Data_Loader(DataLoader):
         self.fcTransforms = [transforms.ToTensor(), ReshapeTransform((-1,))]
         self.expandOutput = args.expandOutput
         self.dataset = args.dataset
+        self.nbBits = args.nbBits
 
     def __call__(self):
         """We return a tuple with both dataloader for train and test"""
@@ -43,7 +45,7 @@ class Data_Loader(DataLoader):
                     datasets.MNIST(
                         root='./data', train=True, download=True,
                         transform=transforms.Compose(self.fcTransforms),
-                        target_transform=ReshapeTransformTarget(10, self.expandOutput)
+                        target_transform=ReshapeTransformTarget(10, self.expandOutput, self.nbBits)
                     ),
                     shuffle=True, batch_size=self.trainBatchSize, num_workers=2, pin_memory=True
                 ),
@@ -52,7 +54,7 @@ class Data_Loader(DataLoader):
                     datasets.MNIST(
                         root='./data', train=False, download=True,
                         transform=transforms.Compose(self.fcTransforms),
-                        target_transform=ReshapeTransformTarget(10, self.expandOutput)
+                        target_transform=ReshapeTransformTarget(10, self.expandOutput, self.nbBits)
                     ),
                     shuffle=True, batch_size=self.testBatchSize, num_workers=2, pin_memory=True
                 )

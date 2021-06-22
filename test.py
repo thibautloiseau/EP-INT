@@ -288,11 +288,16 @@ def main6():
 # main6()
 
 ########################################################################################################################
-# Biases impact on training
+# Testing dataloader to recode target as integers
 
 def main7():
+    trainLoader, testloader = Data_Loader(args)()
 
+    _, (data, target) = next(iter(enumerate(trainLoader)))
+
+    print(np.log(1 + np.exp(-9)))
     return 0
+
 
 main7()
 

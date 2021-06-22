@@ -25,7 +25,7 @@ class FCbinWAInt(nn.Module):
         # Parameters for EP
         self.T = args.T
         self.Kmax = args.Kmax
-        self.beta = torch.tensor(args.beta)
+        self.beta = torch.tensor(2**args.beta)
         self.randomBeta = args.randomBeta
 
         self.hasBias = args.hasBias
@@ -127,10 +127,6 @@ class FCbinWAInt(nn.Module):
         preAct = state.copy()
         binState = self.getBinState(state)
         binStateP = self.getBinStateP(state)
-
-        # We transform the target into an int of the good size
-        if target != None:
-            target = (self.maxInt * target).int().float()
 
         # We compute the pre-activation for each layer
         preAct[0] = binStateP[0] * self.W[0](binState[1])

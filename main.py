@@ -62,8 +62,8 @@ parser.add_argument(
 parser.add_argument(
     '--beta',
     type=float,
-    default=2,
-    help='nudging parameter (default: 1)')
+    default=1,
+    help='nudging parameter as a power of 2 (default: 1)')
 parser.add_argument(
     '--randomBeta',
     type=int,
@@ -73,8 +73,8 @@ parser.add_argument(
     '--gammaInt',
     nargs='+',
     type=float,
-    default=[4, 4],
-    help='Low-pass filter constant of BOP for int layers, a power of 2')
+    default=[3, 3],
+    help='Low-pass filter constant of BOP for int layers, a division by a power of 2')
 parser.add_argument(
     '--tauInt',
     nargs='+',
@@ -92,13 +92,13 @@ parser.add_argument(
     nargs='+',
     type=float,
     default=[4, 4],
-    help='Learning rates for bias')
+    help='Learning rates for bias, a division by a power of 2')
 parser.add_argument(
     '--epochs',
     type=int,
     default=100,
     metavar='N',
-    help='number of epochs to train (default: 2)')
+    help='Number of epochs to train (default: 100)')
 # Learning the scaling factor
 parser.add_argument(
     '--learnAlpha',
@@ -123,8 +123,8 @@ if __name__ == '__main__':
     # We reverse the layersList according to the convention that the output is 0 indexed
     args.layersList.reverse()
 
-    for i in range(5, 10):
-        args.lrBias = [i, i]
+    for i in range(1, 5):
+        args.beta = i
         # Initializing the data and the network
         trainLoader, testLoader = Data_Loader(args)()
 
