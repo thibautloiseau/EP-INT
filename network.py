@@ -40,9 +40,16 @@ class FCbinWAInt(nn.Module):
         self.alphasInt = []
 
         # Int coding
-        self.nbBits = args.nbBits
-        self.minInt = -2**(self.nbBits - 1)
-        self.maxInt = 2**(self.nbBits - 1) - 1
+        # For states
+        self.bitsState = args.bitsState
+        self.maxIntState = 2**(self.bitsState - 1) - 1
+
+        # For gradients of weights and biases
+        self.bitsW = args.bitsW
+        self.maxIntW = 2**(self.bitsW - 1) - 1
+
+        self.bitsBias = args.bitsBias
+        self.maxIntBias = 2 ** (self.bitsBias - 1) - 1
 
         # Parameters of BOP
         # Right shift for gammaInt, contribution of gradient and momentum in BOP algorithm
@@ -64,7 +71,7 @@ class FCbinWAInt(nn.Module):
                 else:
                     self.W.extend([nn.Linear(self.layersList[i+1], self.layersList[i], bias=False)])
 
-                alphaInt = int(1 / (2 * np.sqrt(self.layersList[i+1])) * self.maxInt)
+                alphaInt = int(1 / (2 * np.sqrt(self.layersList[i+1])) * self.maxIntState)
                 self.alphasInt.append(alphaInt)
                 self.W[-1].weight.data = alphaInt * torch.sign(self.W[-1].weight)
 
@@ -78,21 +85,24 @@ class FCbinWAInt(nn.Module):
             state.append(torch.zeros(size, self.layersList[layer], requires_grad=False))
 
         # We initialize the input neurons with stochastic binary input data
-        # Only one stochastic example at first to see if it works well. Shouldn't be complicated with MNIST (quasi-binarized already)
-        randV = torch.rand(size=data.shape)
-        stoch = (randV < data).int()
+        for i in range(8):
+            randV = torch.rand(size=data.shape)
+            stoch = (randV < data).int()
+            # first_layer = self.W[-2](stoch).to(self.device)
+            # print(first_layer)
 
+        # We initialize the inputs with the last stochastic example, as the dynamics depends on the input
         state[-1] = stoch.float()
 
         return state
 
     def activ(self, x):
         """Activation function for other layers (integers)"""
-        return (x >= self.maxInt / 2).int().float()
+        return (x >= self.maxIntState / 2).int().float()
 
     def activP(self, x):
         """Derivative of activation function for other layers (integer)"""
-        return ((x >= 0) & (x <= self.maxInt)).int().float()
+        return ((x >= 0) & (x <= self.maxIntState)).int().float()
 
     def getBinState(self, state):
         """Get the binary activation of the pre-activations"""
@@ -102,9 +112,6 @@ class FCbinWAInt(nn.Module):
             # For the first layer (full precision)
             binState[layer] = self.activ(state[layer])
 
-        # Setting the inputs (full precision) that are not activated (already the case a priori...)
-        binState[-1] = state[-1]
-
         return binState
 
     def getBinStateP(self, state):
@@ -113,9 +120,6 @@ class FCbinWAInt(nn.Module):
 
         for layer in range(len(state) - 1):
             binStateP[layer] = self.activP(state[layer])
-
-        # Setting the inputs (no use...)
-        binStateP[-1] = state[-1]
 
         return binStateP
 
@@ -137,9 +141,9 @@ class FCbinWAInt(nn.Module):
             # Next layer contribution
             preAct[layer] += binStateP[layer] * torch.mm(binState[layer - 1], self.W[layer - 1].weight)
             # Updating, filtering, and clamping the pre-activations
-            state[layer] = (0.5 * (state[layer] + preAct[layer])).int().float().clamp(0, self.maxInt)
+            state[layer] = (0.5 * (state[layer] + preAct[layer])).int().float().clamp(0, self.maxIntState)
 
-        state[0] = (0.5 * (state[0] + preAct[0])).int().float().clamp(0, self.maxInt)
+        state[0] = (0.5 * (state[0] + preAct[0])).int().float().clamp(0, self.maxIntState)
 
         return state
 
@@ -160,42 +164,35 @@ class FCbinWAInt(nn.Module):
 
     def computeGradients(self, freeState, nudgedState):
         """Compute the gradients for the considered batch, according to all learnable parameters"""
-        coefInt = int(1 / (self.beta * self.trainBatchSize) * self.maxInt)
-        gradWInt, gradBias, gradAlpha = [], [], []
+        gradWInt, gradBias = [], []
 
         with torch.no_grad():
             # We get the binary states of each neuron
             freeBinState, nudgedBinState = self.getBinState(freeState), self.getBinState(nudgedState)
 
             for layer in range(len(freeState) - 1):
-                gradWInt.append(coefInt * (
+                gradWInt.append(
                         torch.mm(torch.transpose(nudgedBinState[layer], 0, 1), nudgedBinState[layer + 1]) -
                         torch.mm(torch.transpose(freeBinState[layer], 0, 1), freeBinState[layer + 1])
-                ))
+                )
 
                 if self.hasBias:
-                    gradBias.append(coefInt * (nudgedBinState[layer] - freeBinState[layer]).sum(0))
-
-                # if self.learnAlpha:
-                #     gradAlpha.append(0.5 * coef * (
-                #         torch.diag(torch.mm(nudgedBinState[layer], torch.mm(self.W[layer].weight, nudgedBinState[layer + 1].T))).sum() -
-                #         torch.diag(torch.mm(freeBinState[layer], torch.mm(self.W[layer].weight, freeBinState[layer + 1].T))).sum()
-                #     ))
+                    gradBias.append((nudgedBinState[layer] - freeBinState[layer]).sum(0))
 
             # We initialize the accumulated gradients for first iteration or BOP after first iteration
             if self.accGradientsInt == []:
                 self.accGradientsInt = [(self.gammaInt[i] * w).int() for (i, w) in enumerate(gradWInt)]
 
             else:
-                self.accGradientsInt = [torch.add((self.gammaInt[i] * g).int(), ((1 - self.gammaInt[i]) * m).int()) for i, (m, g) in enumerate(zip(self.accGradientsInt, gradWInt))]
+                self.accGradientsInt = [(self.gammaInt[i] * g).int() + m.int() for i, (m, g) in enumerate(zip(self.accGradientsInt, gradWInt))]
 
             gradWInt = self.accGradientsInt
 
-        return gradWInt, gradBias, gradAlpha
+        return gradWInt, gradBias
 
     def updateWeights(self, freeState, nudgedState):
         """Updating parameters after having computed the gradient. We return the number of weight changes in the process"""
-        gradWInt, gradBias, gradAlpha = self.computeGradients(freeState, nudgedState)
+        gradWInt, gradBias = self.computeGradients(freeState, nudgedState)
 
         noChanges = []
 
@@ -209,11 +206,6 @@ class FCbinWAInt(nn.Module):
 
                 # Biases updates
                 if self.hasBias:
-                    self.W[layer].bias += self.lrBias[layer] * gradBias[layer]
-
-                # # Scaling factors updates and weight multiplications
-                # if self.learnAlpha:
-                #     self.alphas[layer] += self.lrAlpha[layer] * gradAlpha[layer]
-                #     self.W[layer].weight.data = self.alphas[layer] * torch.sign(self.W[layer].weight)
+                    self.W[layer].bias += (self.lrBias[layer] * gradBias[layer]).int()
 
         return noChanges

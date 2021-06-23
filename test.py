@@ -1,3 +1,5 @@
+import os
+
 import numpy as np
 import torch
 
@@ -276,28 +278,65 @@ def main6():
 
         nudgedState = state.copy()
 
-        gradW, _, _ = net.computeGradients(freeState, nudgedState)
+        gradW, gradBias = net.computeGradients(freeState, nudgedState)
+
         # for k in range(len(gradW)):
-        #     print('layer ' + str(k))
-        #     grad = gradW[k].tolist()
-        #     plt.plot(grad, '+')
-        #     plt.title('layer ' + str(k))
+        #     print('Weights layer ' + str(k))
+        #     gradw = gradW[k].tolist()
+        #     plt.plot(gradw, '+')
+        #     plt.title('Weights layer ' + str(k))
         #     plt.show()
 
 
-# main6()
+        for k in range(len(gradBias)):
+            print('Biases layer ' + str(k))
+            gradb = (1/ 2**args.lrBias[k] * gradBias[k]).tolist()
+            plt.plot(gradb, '+')
+            plt.title('Biases layer ' + str(k))
+            plt.show()
+
+
+main6()
 
 ########################################################################################################################
-# Testing dataloader to recode target as integers
+# See end values of network weights and biases
+
 
 def main7():
     trainLoader, testloader = Data_Loader(args)()
 
-    _, (data, target) = next(iter(enumerate(trainLoader)))
+    for dir, subdir, files in os.walk(os.getcwd()):
+        for file in files:
+            cpath = os.path.join(dir, file)
+            if '.pt' in cpath and 'S7' in cpath and '23' in cpath:
+                model = (torch.load(cpath))
 
-    print(np.log(1 + np.exp(-9)))
+    print(model['modelStateDict'])
+
     return 0
 
+# main7()
 
-main7()
+########################################################################################################################
+# Number of bits to have a granularity of 1e-7
+
+def main8():
+    print(6*np.log(10)/np.log(2))
+    # print(2**15)
+    return 0
+
+# main8()
+
+########################################################################################################################
+# Testing code copy
+
+def main9():
+    net = FCbinWAInt(args)
+
+    # Create visualizer for tensorboard and save training
+    visualizer = Visualizer(net, args)
+    visualizer.saveHyperParameters()
+
+# main9()
+
 

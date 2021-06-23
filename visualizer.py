@@ -4,6 +4,7 @@ import subprocess
 import datetime
 import json
 import numpy as np
+import shutil
 
 
 class Visualizer(SummaryWriter):
@@ -39,6 +40,14 @@ class Visualizer(SummaryWriter):
         """Save all arguments given by user in json file"""
         with open(os.path.join(self.path, 'hyperparameters.json'), 'w') as file:
             json.dump(vars(self.args), file, indent=4)
+
+        # Copy code used for training
+        code = [file for file in os.listdir(os.getcwd()) if '.py' in file]
+
+        os.makedirs(os.path.join(self.path, 'code'))
+
+        for file in code:
+            shutil.copyfile(file, os.path.join(self.path, 'code',file))
 
         return 0
 

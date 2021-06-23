@@ -9,13 +9,18 @@ import json
 # ================================================ Training FC architecture ============================================
 # ======================================================================================================================
 
-def trainFC(net, trainLoader, args):
+def trainFC(net, trainLoader, epoch, args):
     """Train the network with FC architecture for one epoch"""
     net.train()
 
     criterion = nn.MSELoss(reduction='sum')
     aveFalsePred, singleFalsePred, trainLoss = 0, 0, 0
     nbChanges = [0. for k in range(len(net.layersList) - 1)]
+
+    # Decay
+    if epoch % 5 == 0 and epoch != 0:
+        for k in range(len(args.tauInt)):
+            args.tauInt[k] = args.tauInt[k] * args.decay
 
     for batch_idx, (data, targets) in enumerate(tqdm(trainLoader)):
         # We set beta's sign to be random for each batch
