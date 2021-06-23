@@ -301,7 +301,9 @@ main6()
 ########################################################################################################################
 # See end values of network weights and biases
 
+
 def main7():
+    trainLoader, testloader = Data_Loader(args)()
 
     for dir, subdir, files in os.walk(os.getcwd()):
         for file in files:
@@ -336,4 +338,5 @@ def main9():
     visualizer.saveHyperParameters()
 
 # main9()
+
 

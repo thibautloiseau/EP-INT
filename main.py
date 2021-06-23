@@ -67,14 +67,14 @@ parser.add_argument(
 parser.add_argument(
     '--randomBeta',
     type=int,
-    default=1,
+    default=0,
     help='Use random sign of beta for training or fixed >0 sign (default: 1, other: 0)')
 parser.add_argument(
     '--gammaInt',
     nargs='+',
     type=float,
     default=[10, 10],
-    help='Low-pass filter constant of BOP for int layers, a power of 2')
+    help='Low-pass filter constant of BOP for int layers, a power of 2') 
 parser.add_argument(
     '--tauInt',
     nargs='+',

@@ -25,7 +25,7 @@ class FCbinWAInt(nn.Module):
         # Parameters for EP
         self.T = args.T
         self.Kmax = args.Kmax
-        self.beta = torch.tensor(args.beta)
+        self.beta = torch.tensor(2**args.beta)
         self.randomBeta = args.randomBeta
 
         self.hasBias = args.hasBias

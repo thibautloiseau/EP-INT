@@ -24,8 +24,8 @@ def trainFC(net, trainLoader, epoch, args):
 
     for batch_idx, (data, targets) in enumerate(tqdm(trainLoader)):
         # We set beta's sign to be random for each batch
-        if net.randomBeta == 1:
-            net.beta = torch.sign(torch.randn(1)) * args.beta
+        # if net.randomBeta == 1:
+        #     net.beta = torch.sign(torch.randn(1)) * args.beta
 
         # We initialize the first layer with input data
         state = net.initHidden(data)
