@@ -18,7 +18,7 @@ def trainFC(net, trainLoader, epoch, args):
     nbChanges = [0. for k in range(len(net.layersList) - 1)]
 
     # Decay
-    if epoch % 5 == 0 and epoch != 0:
+    if epoch % 3 == 0 and epoch != 0:
         for k in range(len(args.tauInt)):
             args.tauInt[k] = args.tauInt[k] * args.decay
 

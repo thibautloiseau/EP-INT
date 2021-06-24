@@ -27,7 +27,6 @@ class ReshapeTransformTarget:
         return targetOneHot.scatter_(1, target, 1).repeat_interleave(self.expandOutput).squeeze(0) * self.maxIntState
 
 
-
 # For fc architecture
 class Data_Loader(DataLoader):
     """Create the data_loader for training and for testing"""

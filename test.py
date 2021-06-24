@@ -5,47 +5,6 @@ import torch
 
 from main import *
 import matplotlib.pyplot as plt
-import pickle
-
-# Define classes to import data
-class ReshapeTransform:
-    """Transform the input in the appropriate way"""
-    def __init__(self, newSize):
-        self.newSize = newSize
-
-    def __call__(self, img):
-        return torch.reshape(img, self.newSize)
-
-
-class ReshapeTransformTarget:
-    """Transform target output in the appropriate way"""
-    def __init__(self, noClasses, expandOutput):
-        self.noClasses = noClasses
-        self.expandOutput = expandOutput
-
-    def __call__(self, target):
-        target = torch.tensor(target).unsqueeze(0).unsqueeze(1)
-        targetOneHot = torch.zeros((1, self.noClasses))
-
-        return targetOneHot.scatter_(1, target, 1).repeat_interleave(self.expandOutput).squeeze(0)
-
-
-# For fc architecture
-class DataSet():
-    """Create the data_loader for training and for testing"""
-    def __init__(self, args):
-        self.trainBatchSize = args.trainBatchSize
-        self.testBatchSize = args.testBatchSize
-        self.fcTransforms = [transforms.ToTensor(), ReshapeTransform((-1,))]
-        self.expandOutput = args.expandOutput
-
-    def __call__(self):
-        """We return a tuple with both dataloader for train and test"""
-        return datasets.MNIST(
-                    root='./data', train=True, download=True,
-                    transform=transforms.Compose(self.fcTransforms),
-                    target_transform=ReshapeTransformTarget(10, self.expandOutput)
-                )
 
 ########################################################################################################################
 # Test on alpha values
@@ -280,27 +239,26 @@ def main6():
 
         gradW, gradBias = net.computeGradients(freeState, nudgedState)
 
-        # for k in range(len(gradW)):
-        #     print('Weights layer ' + str(k))
-        #     gradw = gradW[k].tolist()
-        #     plt.plot(gradw, '+')
-        #     plt.title('Weights layer ' + str(k))
-        #     plt.show()
-
-
-        for k in range(len(gradBias)):
-            print('Biases layer ' + str(k))
-            gradb = (1/ 2**args.lrBias[k] * gradBias[k]).tolist()
-            plt.plot(gradb, '+')
-            plt.title('Biases layer ' + str(k))
+        for k in range(len(gradW)):
+            print('Weights layer ' + str(k))
+            gradw = gradW[k].tolist()
+            plt.plot(gradw, '+')
+            plt.title('Weights layer ' + str(k))
             plt.show()
 
 
-main6()
+        # for k in range(len(gradBias)):
+        #     print('Biases layer ' + str(k))
+        #     gradb = gradBias[k].tolist()
+        #     plt.plot(gradb, '+')
+        #     plt.title('Biases layer ' + str(k))
+        #     plt.show()
+
+
+# main6()
 
 ########################################################################################################################
 # See end values of network weights and biases
-
 
 def main7():
     trainLoader, testloader = Data_Loader(args)()
@@ -308,7 +266,7 @@ def main7():
     for dir, subdir, files in os.walk(os.getcwd()):
         for file in files:
             cpath = os.path.join(dir, file)
-            if '.pt' in cpath and 'S7' in cpath and '23' in cpath:
+            if '.pt' in cpath and 'S7' in cpath and '24' in cpath:
                 model = (torch.load(cpath))
 
     print(model['modelStateDict'])
@@ -338,5 +296,48 @@ def main9():
     visualizer.saveHyperParameters()
 
 # main9()
+
+########################################################################################################################
+# Testing values of accumulated gradients
+
+def main10():
+    args.layersList.reverse()
+
+    trainLoader, _ = Data_Loader(args)()
+
+    net = FCbinWAInt(args)
+
+    if net.cuda:
+        net.to(net.device)
+
+    for i in range(2):
+        for batch, (data, target) in enumerate(tqdm(trainLoader)):
+
+            state = net.initHidden(data)
+
+            if net.cuda:
+                targets = target.to(net.device)
+                net.beta = net.beta.to(net.device)
+
+                for i in range(len(state)):
+                    state[i] = state[i].to(net.device)
+
+            state = net.forward(state)
+            freeState = state.copy()
+
+            nudgedState = net.forward(state, beta=net.beta, target=targets)
+
+            gradW, _ = net.computeGradients(freeState, nudgedState)
+            _ = net.updateWeights(freeState=freeState, nudgedState=state)
+
+
+    for k in range(len(gradW)):
+        print('Weights layer ' + str(k))
+        gradw = gradW[k].tolist()
+        plt.plot(gradw, '+')
+        plt.title('Weights layer ' + str(k))
+        plt.show()
+
+main10()
 
 

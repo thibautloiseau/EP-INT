@@ -29,8 +29,6 @@ class FCbinWAInt(nn.Module):
         self.randomBeta = args.randomBeta
 
         self.hasBias = args.hasBias
-        # Right shift for the learning rates of biases
-        self.lrBias = [1 / 2**args.lrBias[i] for i in range(len(args.lrBias))]
 
         # Batch sizes
         self.trainBatchSize = args.trainBatchSize
@@ -44,20 +42,12 @@ class FCbinWAInt(nn.Module):
         self.bitsState = args.bitsState
         self.maxIntState = 2**(self.bitsState - 1) - 1
 
-        # For gradients of weights and biases
-        self.bitsW = args.bitsW
-        self.maxIntW = 2**(self.bitsW - 1) - 1
-
-        self.bitsBias = args.bitsBias
-        self.maxIntBias = 2 ** (self.bitsBias - 1) - 1
-
         # Parameters of BOP
-        # Right shift for gammaInt, contribution of gradient and momentum in BOP algorithm
-        self.gammaInt = [1 / 2**args.gammaInt[i] for i in range(len(args.gammaInt))]
         self.tauInt = args.tauInt
 
-        # Initialize the accumulated gradients for the batch and the scaling factors
+        # Initialize the accumulated gradients for the batch + clamping
         self.accGradientsInt = []
+        self.clampMom = args.clampMom
 
         # Initialize the network according to the layersList given with XNOR-net method
         self.W = nn.ModuleList(None)
@@ -66,7 +56,8 @@ class FCbinWAInt(nn.Module):
             for i in range(len(self.layersList) - 1):
                 if self.hasBias:
                     self.W.extend([nn.Linear(self.layersList[i+1], self.layersList[i], bias=True)])
-                    self.W[-1].bias.data = torch.zeros(size=self.W[-1].bias.data.shape)
+                    # self.W[-1].bias.data = torch.zeros(size=self.W[-1].bias.data.shape)
+                    self.W[-1].bias.data = int(1 / (2 * np.sqrt(self.layersList[i+1])) * self.maxIntState) * torch.sign(self.W[-1].bias)
 
                 else:
                     self.W.extend([nn.Linear(self.layersList[i+1], self.layersList[i], bias=False)])
@@ -92,7 +83,7 @@ class FCbinWAInt(nn.Module):
             # print(first_layer)
 
         # We initialize the inputs with the last stochastic example, as the dynamics depends on the input
-        state[-1] = stoch.float()
+        state[-1] = data.float()
 
         return state
 
@@ -172,19 +163,19 @@ class FCbinWAInt(nn.Module):
 
             for layer in range(len(freeState) - 1):
                 gradWInt.append(
-                        torch.mm(torch.transpose(nudgedBinState[layer], 0, 1), nudgedBinState[layer + 1]) -
-                        torch.mm(torch.transpose(freeBinState[layer], 0, 1), freeBinState[layer + 1])
-                )
+                                (torch.mm(torch.transpose(nudgedBinState[layer], 0, 1), nudgedBinState[layer + 1]) -
+                                torch.mm(torch.transpose(freeBinState[layer], 0, 1), freeBinState[layer + 1])).clamp(-8, 7)
+                                )
 
                 if self.hasBias:
-                    gradBias.append((nudgedBinState[layer] - freeBinState[layer]).sum(0))
+                    gradBias.append((nudgedBinState[layer] - freeBinState[layer]).sum(0).clamp(-8, 7))
 
-            # We initialize the accumulated gradients for first iteration or BOP after first iteration
+            # We initialize the accumulated gradients for first iteration or BOP
             if self.accGradientsInt == []:
-                self.accGradientsInt = [(self.gammaInt[i] * w).int() for (i, w) in enumerate(gradWInt)]
+                self.accGradientsInt = gradWInt
 
             else:
-                self.accGradientsInt = [(self.gammaInt[i] * g).int() + m.int() for i, (m, g) in enumerate(zip(self.accGradientsInt, gradWInt))]
+                self.accGradientsInt = [(g.int() + m.int()).clamp(-self.clampMom, self.clampMom - 1) for (g, m) in zip(gradWInt, self.accGradientsInt)]
 
             gradWInt = self.accGradientsInt
 
@@ -202,10 +193,11 @@ class FCbinWAInt(nn.Module):
                 tauTensorInt = self.tauInt[layer] * torch.ones(self.W[layer].weight.shape).to(self.device)
                 modifyWeightsInt = -1 * torch.sign((-1 * torch.sign(self.W[layer].weight) * gradWInt[layer] > tauTensorInt).int() - 0.5)
                 noChanges.append(torch.sum(abs(modifyWeightsInt - 1)).item() / 2)
+
                 self.W[layer].weight.data = torch.mul(self.W[layer].weight.data, modifyWeightsInt)
 
                 # Biases updates
                 if self.hasBias:
-                    self.W[layer].bias += (self.lrBias[layer] * gradBias[layer]).int()
+                    self.W[layer].bias += gradBias[layer]
 
         return noChanges

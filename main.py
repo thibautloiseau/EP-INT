@@ -36,7 +36,7 @@ parser.add_argument(
     '--expandOutput',
     type=int,
     default=10,
-    help='Quantity by how much we expand the ouput layer)')
+    help='Quantity by how much we expand the output layer)')
 parser.add_argument(
     '--trainBatchSize',
     type=int,
@@ -46,17 +46,17 @@ parser.add_argument(
     '--testBatchSize',
     type=int,
     default=512,
-    help='Testing B0atch size (default=512)')
+    help='Testing Batch size (default=512)')
 parser.add_argument(
     '--T',
     type=int,
-    default=20,
+    default=16,
     metavar='T',
     help='Number of time steps in the free phase (default: 50)')
 parser.add_argument(
     '--Kmax',
     type=int,
-    default=10,
+    default=16,
     metavar='Kmax',
     help='Number of time steps in the backward pass (default: 10)')
 parser.add_argument(
@@ -67,32 +67,25 @@ parser.add_argument(
 parser.add_argument(
     '--randomBeta',
     type=int,
-    default=0,
+    default=1,
     help='Use random sign of beta for training or fixed >0 sign (default: 1, other: 0)')
-parser.add_argument(
-    '--gammaInt',
-    nargs='+',
-    type=float,
-    default=[10, 10],
-    help='Low-pass filter constant of BOP for int layers, a power of 2') 
 parser.add_argument(
     '--tauInt',
     nargs='+',
-    type=float,
-    default=[600, 300],
+    type=int,
+    default=[12, 12],
     help='Thresholds used for the binary optimization in BOP')
+parser.add_argument(
+    '--clampMom',
+    type=int,
+    default=2**9,
+    help='Clamp the momentum for each layer')
 # Training settings
 parser.add_argument(
     '--hasBias',
     type=int,
-    default=1,
+    default=0,
     help='Does the network has biases ? (default: 1, other: 0)')
-parser.add_argument(
-    '--lrBias',
-    nargs='+',
-    type=float,
-    default=[17, 17],
-    help='Learning rates for bias')
 parser.add_argument(
     '--epochs',
     type=int,
@@ -105,19 +98,9 @@ parser.add_argument(
     default=13,
     help='Number of bits for states in signed int coding')
 parser.add_argument(
-    '--bitsW',
-    type=int,
-    default=20,
-    help='Number of bits for weights gradients in signed int coding')
-parser.add_argument(
-    '--bitsBias',
-    type=int,
-    default=24,
-    help='Number of bits for biases gradients in signed int coding')
-parser.add_argument(
     '--decay',
     type=int,
-    default=2,
+    default=1,
     help='Quantity by which we multiply the threshold for BOP')
 
 args = parser.parse_args()
