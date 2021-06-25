@@ -27,6 +27,7 @@ class FCbinWAInt(nn.Module):
         self.Kmax = args.Kmax
         self.beta = torch.tensor(2**args.beta)
         self.randomBeta = args.randomBeta
+        self.constNudge = args.constNudge
 
         self.hasBias = args.hasBias
 
@@ -45,9 +46,10 @@ class FCbinWAInt(nn.Module):
         # Parameters of BOP
         self.tauInt = args.tauInt
 
-        # Initialize the accumulated gradients for the batch + clamping
+        # Initialize the accumulated gradients for the batch, clamping and reinitializing gradients
         self.accGradientsInt = []
         self.clampMom = args.clampMom
+        self.reinitGrad = args.reinitGrad
 
         # Initialize the network according to the layersList given with XNOR-net method
         self.W = nn.ModuleList(None)
@@ -56,8 +58,8 @@ class FCbinWAInt(nn.Module):
             for i in range(len(self.layersList) - 1):
                 if self.hasBias:
                     self.W.extend([nn.Linear(self.layersList[i+1], self.layersList[i], bias=True)])
-                    # self.W[-1].bias.data = torch.zeros(size=self.W[-1].bias.data.shape)
-                    self.W[-1].bias.data = int(1 / (2 * np.sqrt(self.layersList[i+1])) * self.maxIntState) * torch.sign(self.W[-1].bias)
+                    self.W[-1].bias.data = torch.zeros(size=self.W[-1].bias.data.shape)
+                    # self.W[-1].bias.data = int(1 / (2 * np.sqrt(self.layersList[i+1])) * self.maxIntState) * torch.sign(self.W[-1].bias)
 
                 else:
                     self.W.extend([nn.Linear(self.layersList[i+1], self.layersList[i], bias=False)])
@@ -73,7 +75,7 @@ class FCbinWAInt(nn.Module):
         size = data.shape[0]
 
         for layer in range(len(self.layersList)):
-            state.append(torch.zeros(size, self.layersList[layer], requires_grad=False))
+            state.append(self.maxIntState / 2 * torch.ones(size, self.layersList[layer], requires_grad=False))
 
         # We initialize the input neurons with stochastic binary input data
         for i in range(8):
@@ -90,17 +92,18 @@ class FCbinWAInt(nn.Module):
     def activ(self, x):
         """Activation function for other layers (integers)"""
         return (x >= self.maxIntState / 2).int().float()
+        # return torch.sign(x - self.maxIntState / 2).int().float()
 
     def activP(self, x):
         """Derivative of activation function for other layers (integer)"""
         return ((x >= 0) & (x <= self.maxIntState)).int().float()
+        # return 2 * (((x >= 0) & (x <= self.maxIntState)).int() - 0.5).int().float()
 
     def getBinState(self, state):
         """Get the binary activation of the pre-activations"""
         binState = state.copy()
 
         for layer in range(len(state) - 1):
-            # For the first layer (full precision)
             binState[layer] = self.activ(state[layer])
 
         return binState
@@ -114,7 +117,7 @@ class FCbinWAInt(nn.Module):
 
         return binStateP
 
-    def stepper(self, state, target=None, beta=0):
+    def stepper(self, state, target=None, beta=0, nudge=None):
         """Evolution of the state during free phase or nudged phase"""
         preAct = state.copy()
         binState = self.getBinState(state)
@@ -124,7 +127,10 @@ class FCbinWAInt(nn.Module):
         preAct[0] = binStateP[0] * self.W[0](binState[1])
 
         if beta != 0:
-            preAct[0] += beta * (target - state[0])
+            if self.constNudge:
+                preAct[0] += beta * (target - nudge[0])
+            else:
+                preAct[0] += beta * (target - state[0])
 
         for layer in range(1, len(state) - 1):
             # Previous layer contribution
@@ -148,8 +154,9 @@ class FCbinWAInt(nn.Module):
 
             # Nudged phase
             else:
+                nudge = state.copy()
                 for i in range(self.Kmax):
-                    state = self.stepper(state, target=target, beta=self.beta)
+                    state = self.stepper(state, target=target, beta=self.beta, nudge=nudge)
 
         return state
 
@@ -164,7 +171,7 @@ class FCbinWAInt(nn.Module):
             for layer in range(len(freeState) - 1):
                 gradWInt.append(
                                 (torch.mm(torch.transpose(nudgedBinState[layer], 0, 1), nudgedBinState[layer + 1]) -
-                                torch.mm(torch.transpose(freeBinState[layer], 0, 1), freeBinState[layer + 1])).clamp(-8, 7)
+                                 torch.mm(torch.transpose(freeBinState[layer], 0, 1), freeBinState[layer + 1])).clamp(-8, 7)
                                 )
 
                 if self.hasBias:
@@ -175,7 +182,7 @@ class FCbinWAInt(nn.Module):
                 self.accGradientsInt = gradWInt
 
             else:
-                self.accGradientsInt = [(g.int() + m.int()).clamp(-self.clampMom, self.clampMom - 1) for (g, m) in zip(gradWInt, self.accGradientsInt)]
+                self.accGradientsInt = [(g.int() + m.int()).clamp(-self.clampMom[i], self.clampMom[i]) for i, (g, m) in enumerate(zip(gradWInt, self.accGradientsInt))]
 
             gradWInt = self.accGradientsInt
 
@@ -196,8 +203,63 @@ class FCbinWAInt(nn.Module):
 
                 self.W[layer].weight.data = torch.mul(self.W[layer].weight.data, modifyWeightsInt)
 
+                # We reinitialize the accumulated gradients to 0 if the weight has been flipped
+                if self.reinitGrad:
+                    modifyGradInt = ((modifyWeightsInt + 1) / 2).int()
+                    self.accGradientsInt[layer] = torch.mul(self.accGradientsInt[layer], modifyGradInt)
+
                 # Biases updates
                 if self.hasBias:
                     self.W[layer].bias += gradBias[layer]
 
         return noChanges
+
+# ======================================================================================================================
+# ==================================== Conv architecture - Binarized weights and synapses ==============================
+# ======================================================================================================================
+
+class ConvWAInt(nn.Module):
+    def __init__(self, args):
+        super(ConvWAInt, self).__init__()
+
+        # Checking device
+        if torch.cuda.is_available():
+            self.cuda = True
+            self.device = args.device
+            self.deviceName = torch.cuda.get_device_name()
+
+        else:
+            self.cuda = False
+            self.device = torch.device("cpu")
+
+        # Dynamics parameters
+        self.T = args.T
+        self.Kmax = args.Kmax
+        self.beta = torch.tensor(args.beta)
+        self.batchSize = args.batchSize
+
+        # Conv layers parameters
+        self.convList = args.convList
+        self.stridePool = args.stridePool
+        self.conv = nn.ModuleList(None)
+        self.convAccGradients = []
+        self.kernel = args.kernel
+        self.padding = args.padding
+        self.convTau = args.convTau
+
+        # FC layers parameters
+        self.layersList = args.layersList
+        self.fc = nn.ModuleList(None)
+        self.fcAccGradients = []
+        self.fcTau = args.fcTau
+
+
+
+
+
+
+
+
+
+
+

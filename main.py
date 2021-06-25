@@ -14,8 +14,8 @@ parser = argparse.ArgumentParser(description='Binary Equilibrium Propagation')
 parser.add_argument(
     '--dataset',
     type=str,
-    default='MNIST',
-    help='Dataset to train the network (default: MNIST, others: CIFAR-10)')
+    default='FashionMNIST',
+    help='Dataset to train the network (default: MNIST, others: FashionMNIST)')
 parser.add_argument(
     '--device',
     type=int,
@@ -46,7 +46,7 @@ parser.add_argument(
     '--testBatchSize',
     type=int,
     default=512,
-    help='Testing Batch size (default=512)')
+    help='Testing batch size (default=512)')
 parser.add_argument(
     '--T',
     type=int,
@@ -67,18 +67,19 @@ parser.add_argument(
 parser.add_argument(
     '--randomBeta',
     type=int,
-    default=1,
+    default=0,
     help='Use random sign of beta for training or fixed >0 sign (default: 1, other: 0)')
 parser.add_argument(
     '--tauInt',
     nargs='+',
     type=int,
-    default=[12, 12],
+    default=[10, 6],
     help='Thresholds used for the binary optimization in BOP')
 parser.add_argument(
     '--clampMom',
+    nargs='+',
     type=int,
-    default=2**9,
+    default= [2**7, 2**7],
     help='Clamp the momentum for each layer')
 # Training settings
 parser.add_argument(
@@ -89,7 +90,7 @@ parser.add_argument(
 parser.add_argument(
     '--epochs',
     type=int,
-    default=100,
+    default=50,
     metavar='N',
     help='number of epochs to train (default: 2)')
 parser.add_argument(
@@ -102,6 +103,25 @@ parser.add_argument(
     type=int,
     default=1,
     help='Quantity by which we multiply the threshold for BOP')
+parser.add_argument(
+    '--constNudge',
+    type=int,
+    default=0,
+    help='Apply a constant nudge in nudging phase (default: 0)')
+parser.add_argument(
+    '--reinitGrad',
+    type=int,
+    default=0,
+    help='Reinitialize the accumulated gradients if the weight has been flipped (default: 0, others: 1)')
+
+# Parameters for conv architecture
+parser.add_argument(
+    '--convList',
+    nargs='+',
+    type=int,
+    default=[],
+    help="List of convolutional layers with number of channels (default: )")
+
 
 args = parser.parse_args()
 
@@ -109,56 +129,63 @@ if __name__ == '__main__':
     # We reverse the layersList according to the convention that the output is 0 indexed
     args.layersList.reverse()
 
-    # Initializing the data and the network
-    trainLoader, testLoader = Data_Loader(args)()
+    for i in range(5, 12):
+        print('Nb of bits for the accumulated gradients: ', i + 1)
+        args.clampMom = [2**i, 2**i]
+        # Initializing the data and the network
+        trainLoader, testLoader = Data_Loader(args)()
 
-    net = FCbinWAInt(args)
+        if args.archi == 'fc':
+            net = FCbinWAInt(args)
 
-    # Create visualizer for tensorboard and save training
-    visualizer = Visualizer(net, args)
-    visualizer.saveHyperParameters()
+        elif args.archi == 'conv':
+            net = ConvWAInt(args)
 
-    if net.cuda:
-        net.to(net.device)
+        # Create visualizer for tensorboard and save training
+        visualizer = Visualizer(net, args)
+        visualizer.saveHyperParameters()
 
-    print("Running on " + net.deviceName)
+        if net.cuda:
+            net.to(net.device)
 
-    # Training and testing the network
-    for epoch in tqdm(range(args.epochs)):
-        print("\nStarting epoch " + str(epoch + 1) + "/" + str(args.epochs))
+        print("Running on " + net.deviceName)
 
-        # Training
-        print("Training")
-        nbChanges, aveTrainError, singleTrainError, trainLoss, _ = trainFC(net, trainLoader, epoch, args)
+        # Training and testing the network
+        for epoch in tqdm(range(args.epochs)):
+            print("\nStarting epoch " + str(epoch + 1) + "/" + str(args.epochs))
 
-        visualizer.addTraining(aveTrainError, singleTrainError, trainLoss, epoch)
-        visualizer.addNbChanges(nbChanges, epoch)
+            # Training
+            print("Training")
+            nbChanges, aveTrainError, singleTrainError, trainLoss, _ = trainFC(net, trainLoader, epoch, args)
 
-        # Testing
-        print("Testing")
-        aveTestError, singleTestError, testLoss = testFC(net, testLoader, args)
-        visualizer.addTesting(aveTestError, singleTestError, testLoss, epoch)
+            visualizer.addTraining(aveTrainError, singleTrainError, trainLoss, epoch)
+            visualizer.addNbChanges(nbChanges, epoch)
 
-        print("Training loss: " + str(trainLoss))
-        print("Average training error: " + str(aveTrainError))
-        print("Single training error: " + str(singleTrainError))
+            # Testing
+            print("Testing")
+            aveTestError, singleTestError, testLoss = testFC(net, testLoader, args)
+            visualizer.addTesting(aveTestError, singleTestError, testLoss, epoch)
 
-        print("Testing loss: " + str(testLoss))
-        print("Average testing error: " + str(aveTestError))
-        print("Single testing error: " + str(singleTestError))
+            print("Training loss: " + str(trainLoss))
+            print("Average training error: " + str(aveTrainError))
+            print("Single training error: " + str(singleTrainError))
 
-        # Save checkpoint after epoch
-        print("Saving checkpoint")
+            print("Testing loss: " + str(testLoss))
+            print("Average testing error: " + str(aveTestError))
+            print("Single testing error: " + str(singleTestError))
 
-        torch.save({
-            'epoch': epoch,
-            'modelStateDict': net.state_dict(),
-            'trainLoss': trainLoss,
-            'aveTrainError': aveTrainError,
-            'testLoss': testLoss,
-            'aveTestError': aveTestError,
-        }, os.path.join(visualizer.path, 'checkpoint.pt'))
+            # Save checkpoint after epoch
+            print("Saving checkpoint")
 
-    print("Finished training")
+            torch.save({
+                'epoch': epoch,
+                'modelStateDict': net.state_dict(),
+                'trainLoss': trainLoss,
+                'aveTrainError': aveTrainError,
+                'testLoss': testLoss,
+                'aveTestError': aveTestError,
+            }, os.path.join(visualizer.path, 'checkpoint.pt'))
+
+        print("Finished training")
 
 

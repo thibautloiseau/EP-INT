@@ -12,13 +12,13 @@ class ReshapeTransform:
     def __call__(self, img):
         return torch.reshape(img, self.newSize)
 
+
 class ReshapeTransformTarget:
     """Transform target output in the appropriate way"""
     def __init__(self, noClasses, expandOutput, maxIntState):
         self.noClasses = noClasses
         self.expandOutput = expandOutput
         self.maxIntState = maxIntState
-
 
     def __call__(self, target):
         target = torch.tensor(target).unsqueeze(0).unsqueeze(1)
@@ -37,7 +37,6 @@ class Data_Loader(DataLoader):
         self.expandOutput = args.expandOutput
         self.dataset = args.dataset
         self.maxIntState = 2**(args.bitsState - 1) - 1
-
 
     def __call__(self):
         """We return a tuple with both dataloader for train and test"""
@@ -63,3 +62,26 @@ class Data_Loader(DataLoader):
                     shuffle=True, batch_size=self.testBatchSize, num_workers=2, pin_memory=True
                 )
             )
+        if self.dataset == 'FashionMNIST':
+            return (
+                DataLoader(
+                    datasets.FashionMNIST(
+                        root='./data', train=True, download=True,
+                        transform=transforms.Compose(self.fcTransforms),
+                        target_transform=ReshapeTransformTarget(10, self.expandOutput, self.maxIntState)
+
+                    ),
+                    shuffle=True, batch_size=self.trainBatchSize, num_workers=2, pin_memory=True
+                ),
+
+                DataLoader(
+                    datasets.FashionMNIST(
+                        root='./data', train=False, download=True,
+                        transform=transforms.Compose(self.fcTransforms),
+                        target_transform=ReshapeTransformTarget(10, self.expandOutput, self.maxIntState)
+
+                    ),
+                    shuffle=True, batch_size=self.testBatchSize, num_workers=2, pin_memory=True
+                )
+            )
+

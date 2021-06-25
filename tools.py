@@ -80,7 +80,7 @@ def testFC(net, testLoader, args):
     net.eval()
 
     criterion = nn.MSELoss(reduction='sum')
-    aveFalsePred, singleFalsePred,testLoss = 0, 0, 0
+    aveFalsePred, singleFalsePred, testLoss = 0, 0, 0
 
     for batch_idx, (data, targets) in enumerate(tqdm(testLoader)):
         # We initialize the first layer with input data
@@ -115,3 +115,8 @@ def testFC(net, testLoader, args):
         testLoss = testLoss / len(testLoader.dataset)
 
     return aveTestError.item(), singleTestError.item(), testLoss.item()
+
+# ======================================================================================================================
+# ================================================ Training Conv architecture ==========================================
+# ======================================================================================================================
+

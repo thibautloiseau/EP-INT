@@ -319,8 +319,8 @@ def main10():
                 targets = target.to(net.device)
                 net.beta = net.beta.to(net.device)
 
-                for i in range(len(state)):
-                    state[i] = state[i].to(net.device)
+                for j in range(len(state)):
+                    state[j] = state[j].to(net.device)
 
             state = net.forward(state)
             freeState = state.copy()
@@ -338,6 +338,14 @@ def main10():
         plt.title('Weights layer ' + str(k))
         plt.show()
 
-main10()
+# main10()
+
+########################################################################################################################
+# Number of bits for states with binary weights only and no scaling factors
+
+def main11():
+    print(np.log((8192*2 + 2) / 3) / np.log(2) + 1)
+
+main11()
 
 
