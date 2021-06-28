@@ -178,7 +178,7 @@ def trainConv(net, trainLoader, epoch, args):
 
     return aveTrainError, singleTrainError, trainLoss, nbChangesFC, nbChangesConv
 
-def testConv(net, testLoader, epoch, args):
+def testConv(net, testLoader, args):
     """Testing network with conv arch for one epoch"""
     net.eval()
 
@@ -186,7 +186,7 @@ def testConv(net, testLoader, epoch, args):
     avePred, singlePred, testLoss = 0, 0, 0
 
     with torch.no_grad():
-        for batch_idx, (data, targets) in enumerate(testLoader):
+        for batch_idx, (data, targets) in enumerate(tqdm(testLoader)):
 
             state, indices = net.initHidden(data)
 

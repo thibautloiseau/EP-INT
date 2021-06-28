@@ -94,7 +94,7 @@ class Data_Loader(DataLoader):
                             transform=transforms.Compose(transform),
                             target_transform=ReshapeTransformTarget(10, self.expandOutput, self.maxIntState)
                         ),
-                        batch_size=self.trainBatchSize, shuffle=True, num_workers=0, pin_memory=True
+                        batch_size=self.trainBatchSize, shuffle=True, num_workers=2, pin_memory=True
                     ),
 
                     DataLoader(
@@ -103,7 +103,7 @@ class Data_Loader(DataLoader):
                             transform=transforms.Compose(transform),
                             target_transform=ReshapeTransformTarget(10, self.expandOutput, self.maxIntState)
                         ),
-                        batch_size=self.testBatchSize, shuffle=True, num_workers=0, pin_memory=True
+                        batch_size=self.testBatchSize, shuffle=True, num_workers=2, pin_memory=True
                     )
                 )
 

@@ -439,13 +439,15 @@ class ConvWAInt(nn.Module):
             gradFC.append(coef * (torch.mm(torch.transpose(nudgedBinState[i].view(nudgedBinState[i].size(0), -1), 0, 1), nudgedBinState[i + 1].view(nudgedBinState[i].size(0), -1)) -
                                   torch.mm(torch.transpose(freeBinState[i].view(freeBinState[i].size(0), -1), 0, 1), freeBinState[i + 1].view(freeBinState[i].size(0), -1))))
 
-            gradFCBias.append(coef * (nudgedBinState[i] - freeBinState[i]).sum(0))
+            if self.hasBias:
+                gradFCBias.append(coef * (nudgedBinState[i] - freeBinState[i]).sum(0))
 
         # Link between last conv and first FC layer
         gradFC.append(coef * (torch.mm(torch.transpose(nudgedBinState[self.nbFC - 1], 0, 1), nudgedBinState[self.nbFC].view(nudgedBinState[self.nbFC].size(0), -1)) -
                               torch.mm(torch.transpose(freeBinState[self.nbFC - 1], 0, 1), freeBinState[self.nbFC].view(freeBinState[self.nbFC].size(0), -1))))
 
-        gradFCBias.append(coef * (nudgedBinState[self.nbFC - 1] - freeBinState[self.nbFC - 1]).sum(0))
+        if self.hasBias:
+            gradFCBias.append(coef * (nudgedBinState[self.nbFC - 1] - freeBinState[self.nbFC - 1]).sum(0))
 
         # Conv part of the network
         for i in range(self.nbConv - 1):
@@ -462,10 +464,11 @@ class ConvWAInt(nn.Module):
                                  padding=self.padding))
                             .permute(1, 0, 2, 3))
 
-            gradConvBias.append(coef * (
-                    self.unpool(nudgedBinState[self.nbFC + i], nudgedIndices[self.nbFC + i], output_size=outputSize) -
-                    self.unpool(freeBinState[self.nbFC + i], freeIndices[self.nbFC + i], output_size=outputSize))
-                    .permute(1, 0, 2, 3).contiguous().view(nudgedBinState[self.nbFC + i].size(1), -1).sum(1))
+            if self.hasBias:
+                gradConvBias.append(coef * (
+                        self.unpool(nudgedBinState[self.nbFC + i], nudgedIndices[self.nbFC + i], output_size=outputSize) -
+                        self.unpool(freeBinState[self.nbFC + i], freeIndices[self.nbFC + i], output_size=outputSize))
+                        .permute(1, 0, 2, 3).contiguous().view(nudgedBinState[self.nbFC + i].size(1), -1).sum(1))
 
         outputSize = [nudgedBinState[-1].size(0), nudgedBinState[-1].size(1), self.sizeConvTab[-2], self.sizeConvTab[-2]]
 
@@ -476,10 +479,11 @@ class ConvWAInt(nn.Module):
                             data.permute(1, 0, 2, 3), self.unpool(freeBinState[-1], freeIndices[-1], output_size=outputSize).permute(1, 0, 2, 3), padding=self.padding))
                         .permute(1, 0, 2, 3))
 
-        gradConvBias.append(coef * (
-                self.unpool(nudgedBinState[-1], nudgedIndices[-1], output_size=outputSize) -
-                self.unpool(freeBinState[-1], freeIndices[-1], output_size=outputSize))
-                .permute(1, 0, 2, 3).contiguous().view(nudgedBinState[-1].size(1), -1).sum(1))
+        if self.hasBias:
+            gradConvBias.append(coef * (
+                    self.unpool(nudgedBinState[-1], nudgedIndices[-1], output_size=outputSize) -
+                    self.unpool(freeBinState[-1], freeIndices[-1], output_size=outputSize))
+                    .permute(1, 0, 2, 3).contiguous().view(nudgedBinState[-1].size(1), -1).sum(1))
 
         # Accumulating gradients
         if (self.fcAccGradients == []) or (self.convAccGradients == []):

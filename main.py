@@ -264,7 +264,7 @@ if __name__ == '__main__':
 
             # Testing
             print("Testing")
-            aveTestError, singleTestError, testLoss = testFC(net, testLoader, args)
+            aveTestError, singleTestError, testLoss = testConv(net, testLoader, args)
             visualizer.addTesting(aveTestError, singleTestError, testLoss, epoch)
 
             print("Training loss: " + str(trainLoss))
