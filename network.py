@@ -1,3 +1,5 @@
+import torch
+
 from tools import *
 
 # ======================================================================================================================
@@ -145,7 +147,7 @@ class FCbinWAInt(nn.Module):
         return state
 
     def forward(self, state, beta=0, target=None):
-        """Does the two state evolution for free and nudged phase"""
+        """Two state evolution for free and nudged phase"""
         with torch.no_grad():
             # Free phase
             if beta == 0:
@@ -236,30 +238,191 @@ class ConvWAInt(nn.Module):
         self.T = args.T
         self.Kmax = args.Kmax
         self.beta = torch.tensor(args.beta)
-        self.batchSize = args.batchSize
+        self.trainBatchSize = args.trainBatchSize
+        self.neuronMin, self.neuronMax = 0, 1
 
         # Conv layers parameters
         self.convList = args.convList
-        self.stridePool = args.stridePool
+        self.FPool = args.FPool
         self.conv = nn.ModuleList(None)
         self.convAccGradients = []
         self.kernel = args.kernel
         self.padding = args.padding
         self.convTau = args.convTau
+        self.nbConv = len(self.convList) - 1
 
         # FC layers parameters
-        self.layersList = args.layersList
+        self.fcList = args.layersList
         self.fc = nn.ModuleList(None)
         self.fcAccGradients = []
         self.fcTau = args.fcTau
+        self.nbFC = len(self.fcList)
 
+        self.hasBias = args.hasBias
 
+        if args.dataset == 'MNIST' or args.dataset == 'FashionMNIST':
+            inputSize = 28
+        elif args.dataset == 'CIFAR10':
+            inputSize = 32
 
+        self.sizeConvPoolTab = [inputSize]
+        self.sizeConvTab = [inputSize]
 
+        with torch.no_grad():
+            # For conv part
+            for i in range(self.nbConv):
+                if self.hasBias:
+                    self.conv.append(nn.Conv2d(self.convList[i+1], self.convList[i], self.kernel, padding=self.padding, bias=True))
+                    torch.nn.init.zeros_(self.conv[-1].bias)
 
+                else:
+                    self.conv.append(nn.Conv2d(self.convList[i+1], self.convList[i], self.kernel, padding=self.padding, bias=False))
 
+                for k in range(args.convList[i]):
+                    alpha = round((torch.norm(self.conv[-1].weight[k], p=1) / self.conv[-1].weight[k].numel()).item(), 4)
+                    self.conv[-1].weight[k] = alpha * torch.sign(self.conv[-1].weight[k])
 
+                self.sizeConvTab.append(int((self.sizeConvPoolTab[i] + 2*self.padding - self.kernel) + 1))
+                self.sizeConvPoolTab.append(int((self.sizeConvTab[-1] - self.FPool) / self.FPool + 1))
 
+        self.pool = nn.MaxPool2d(self.FPool, stride=self.FPool, return_indices=True)
+        self.unpool = nn.MaxUnpool2d(self.FPool, stride=self.FPool)
 
+        self.sizeConvPoolTab.reverse()
+        self.sizeConvTab.reverse()
 
+        self.fcList.append(self.convList[0] * self.sizeConvPoolTab[0]**2)
 
+        with torch.no_grad():
+            # For FC part
+            for i in range(self.nbFC):
+                if self.hasBias:
+                    self.fc.append(nn.Linear(self.fcList[i + 1], self.fcList[i], bias=True))
+                    torch.nn.init.zeros_(self.fc[-1].bias)
+
+                else:
+                    self.fc.append(nn.Linear(self.fcList[i + 1], self.fcList[i], bias=False))
+
+                alpha = round((torch.norm(self.fc[-1].weight, p=1) / self.fc[-1].weight.numel()).item(), 4)
+                self.fc[-1].weight.data = alpha * torch.sign(self.fc[-1].weight)
+
+    def initHidden(self, data):
+        """Initialize the neurons"""
+        state, indices = [], []
+        size = data.shape[0]
+
+        for layer in range(self.nbFC):
+            state.append(torch.ones(size, self.fcList[layer], requires_grad=False))
+            indices.append(None)
+
+        for layer in range(self.nbConv):
+            state.append(torch.ones(size, self.convList[layer], self.sizeConvPoolTab[layer], self.sizeConvPoolTab[layer], requires_grad=False))
+            indices.append(None)
+
+        return state, indices
+
+    def activ(self, x):
+        """Activation function"""
+        return (x >= 0.5).int().float()
+
+    def activP(self, x):
+        """Derivative of the activation function"""
+        return ((x >= 0) & (x <= 1)).int().float()
+
+    def getBinState(self, state):
+        """Get the binary state of pre-activations"""
+        binState = state.copy()
+
+        for layer in range(len(state) - 1):
+            binState[layer] = self.activ(state[layer])
+
+        return binState
+
+    def stepper(self, state, indices, data, target=None, beta=0):
+        """Relaxation of the state during free and nudge phases"""
+        preAct = state.copy()
+        binState = self.getBinState(state)
+
+        #####
+        # Last fc layer (output of the network)
+        preAct[0] = self.fc[0](binState[1].view(binState[1].shape[0], -1))
+        preAct[0] *= self.activP(state[0])
+
+        if beta != 0:
+            preAct[0] += beta * (target - state[0])
+
+        #####
+        # Middle fc layer
+        for layer in range(1, self.nbFC):
+            preAct[layer] = self.fc[layer](binState[layer+1].view(binState[layer+1].shape[0], -1))
+            preAct[layer] += torch.mm(binState[layer-1], self.fc[layer-1].weight)
+            preAct[layer] *= self.activP(state[layer])
+
+        #####
+        # Convolutional layers
+        # Last conv layer
+        pooledState, indice = self.pool(self.conv[0](binState[self.nbFC + 1]))
+        indices[self.nbFC] = indice
+        preAct[self.nbFC] = pooledState + torch.mm(binState[self.nbFC - 1], self.fc[-1].weight).view(state[self.nbFC].shape)
+        preAct[self.nbFC] *= self.activP(state[self.nbFC])
+
+        del pooledState, indice
+
+        #####
+        # Middle conv layers
+        for layer in range(1, self.nbConv - 1):
+            pooledState, indice = self.pool(self.conv[layer](binState[self.nbFC + layer + 1]))
+            indices[self.nbFC + layer] = indice
+
+            if indices[self.nbFC + layer - 1] is not None:
+                outputSize = [state[self.nbFC + layer - 1].size(0), state[self.nbFC + layer - 1].size(1), self.sizeConvTab[layer - 1], self.sizeConvTab[layer - 1]]
+
+                unpoolState = nn.functional.conv_transpose2d(
+                    self.unpool(binState[self.nbFC + layer - 1], indices[self.nbFC + layer - 1], output_size=outputSize),
+                    weight=self.conv[layer - 1].weight,
+                    padding=self.padding)
+
+            preAct[self.nbFC + layer] = pooledState
+            preAct[self.nbFC + layer] += unpoolState
+            preAct[self.nbFC + layer] *= self.activP(state[self.nbFC + layer])
+
+            del pooledState, unpoolState, indice, outputSize
+
+        #####
+        # First conv layer
+        pooledState, indice = self.pool(self.conv[-1](data))
+        indices[-1] = indice
+        if indices[-2] is not None:
+            outputSize = [state[-2].size(0), state[-2].size(1), self.sizeConvTab[-3], self.sizeConvTab[-3]]
+            unpoolState = nn.functional.conv_transpose2d(
+                self.unpool(binState[-2], indices[-2], output_size=outputSize),
+                weight=self.conv[-2].weight,
+                padding=self.padding)
+
+        preAct[-1] = self.activP(state[-1]) * (pooledState + unpoolState)
+
+        del pooledState, unpoolState, indice, outputSize
+
+        # Filtering and clamping all states
+        for layer in range(len(state)):
+            state[layer] = 0.5 * (state[layer] + preAct[layer])
+            state[layer] = state[layer].clamp(self.neuronMin, self.neuronMax)
+
+        del preAct, binState
+
+        return state, indices
+
+    def forward(self, state, indices, data, beta=0, target=None):
+        """Two state evolution for free and nudged phase"""
+        with torch.no_grad():
+            # Free phase
+            if beta == 0:
+                for t in range(self.T):
+                    state, indices = self.stepper(state, indices, data)
+
+            # Nudged phase
+            else:
+                for k in range(self.Kmax):
+                    state, indices = self.stepper(state, indices, data, target=target, beta=beta)
+
+        return state, indices

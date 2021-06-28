@@ -5,6 +5,7 @@ import torch
 
 from main import *
 import matplotlib.pyplot as plt
+import time
 
 ########################################################################################################################
 # Test on alpha values
@@ -346,6 +347,60 @@ def main10():
 def main11():
     print(np.log((8192*2 + 2) / 3) / np.log(2) + 1)
 
-main11()
+# main11()
+
+########################################################################################################################
+# Testing conv arch
+
+def main12():
+    args.layersList.reverse()
+    args.convList.reverse()
+
+    trainLoader, _ = Data_Loader(args)()
+
+    net = ConvWAInt(args)
+
+    if net.cuda:
+        net.to(net.device)
+
+    batch, (data, target) = next(iter(enumerate(trainLoader)))
+
+    state, indices = net.initHidden(data)
+
+    if net.cuda:
+        data, target = data.to(net.device), target.to(net.device)
+        net.beta = net.beta.to(net.device)
+
+        for j in range(len(state)):
+            state[j] = state[j].to(net.device)
+
+    T = 50
+    Kmax = 50
+
+    save = [[] for i in range(len(state))]
+
+    # Free phase
+    for t in range(T):
+        state, indices = net.stepper(state, indices, data)
+
+        save[0].append(state[0][32][350].item())
+        save[1].append(state[1][32][0][0][0].item())
+        save[2].append(state[2][32][0][0][0].item())
+
+    for k in range(Kmax):
+        state, indices = net.stepper(state, indices, data, target=target, beta=net.beta)
+
+        save[0].append(state[0][32][350].item())
+        save[1].append(state[1][32][0][0][0].item())
+        save[2].append(state[2][32][0][0][0].item())
+
+    for layer in range(len(save)):
+        plt.plot(save[layer])
+
+    plt.show()
+
+
+
+main12()
 
 

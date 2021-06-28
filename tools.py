@@ -24,8 +24,8 @@ def trainFC(net, trainLoader, epoch, args):
 
     for batch_idx, (data, targets) in enumerate(tqdm(trainLoader)):
         # We set beta's sign to be random for each batch
-        # if net.randomBeta == 1:
-        #     net.beta = torch.sign(torch.randn(1)) * args.beta
+        if net.randomBeta == 1:
+            net.beta = torch.sign(torch.randn(1)) * args.beta
 
         # We initialize the first layer with input data
         state = net.initHidden(data)
@@ -40,7 +40,6 @@ def trainFC(net, trainLoader, epoch, args):
 
         # Free phase
         state = net.forward(state)
-
         freeState = state.copy()
 
         # We calculate the loss after inference and accumulate it for the considered epoch
@@ -120,3 +119,33 @@ def testFC(net, testLoader, args):
 # ================================================ Training Conv architecture ==========================================
 # ======================================================================================================================
 
+def trainConv(net, trainLoader, epoch, args):
+    """Train the network with conv architecture for one epoch"""
+    net.train()
+
+    criterion = nn.MSELoss(reduction='sum')
+    ave_falsePred, single_falsePred, loss_loc = 0, 0, 0
+
+    for batch_idx, (data, targets) in enumerate(tqdm(trainLoader)):
+        if args.random_beta == 1:
+            net.beta = torch.sign(torch.randn(1)) * args.beta
+
+        state, indices = net.initHidden(data)
+
+        if net.cuda:
+            data, targets = data.to(net.device), targets.to(net.device)
+            net.beta = net.beta.to(net.device)
+
+            for i in range(len(state)):
+                state[i] = state[i].to(net.device)
+
+        # Free phase
+        state, indices = net.forward(state, indices, data)
+        freeState = state.copy()
+        freeIndices = indices.copy()
+
+        # Nudged phase
+        state, indices = net.forward(state, indices, data, beta=net.beta, target=targets)
+
+
+    return 0
