@@ -120,14 +120,16 @@ def testFC(net, testLoader, args):
 # ======================================================================================================================
 
 def trainConv(net, trainLoader, epoch, args):
-    """Train the network with conv architecture for one epoch"""
+    """Train convolutional arch for one epoch"""
     net.train()
 
     criterion = nn.MSELoss(reduction='sum')
-    ave_falsePred, single_falsePred, loss_loc = 0, 0, 0
+    avePred, singlePred, trainLoss = 0, 0, 0
+    nbChangesFC = [0. for k in range(len(net.fcList) - 1)]
+    nbChangesConv = [0. for k in range(len(net.convList) - 1)]
 
     for batch_idx, (data, targets) in enumerate(tqdm(trainLoader)):
-        if args.random_beta == 1:
+        if args.randomBeta == 1:
             net.beta = torch.sign(torch.randn(1)) * args.beta
 
         state, indices = net.initHidden(data)
@@ -141,11 +143,79 @@ def trainConv(net, trainLoader, epoch, args):
 
         # Free phase
         state, indices = net.forward(state, indices, data)
+
         freeState = state.copy()
         freeIndices = indices.copy()
 
+        # Accumulating loss
+        lossBatch = (1 / (2 * state[0].size(0))) * criterion(state[0], targets)
+        trainLoss += lossBatch
+
         # Nudged phase
-        state, indices = net.forward(state, indices, data, beta=net.beta, target=targets)
+        state, indices = net.forward(state, indices, data, beta=net.beta, target=targets, pred=freeState[0])
 
+        # Update and track changing weights of the network
+        nbChangesFCBatch, nbChangesConvBatch = net.updateWeight(freeState, state, freeIndices, indices, data)
 
-    return 0
+        # Accumulating the number of changes for FC and conv part of the network
+        nbChangesFC = [x1 + x2 for (x1, x2) in zip(nbChangesFC, nbChangesFCBatch)]
+        nbChangesConv = [x1 + x2 for (x1, x2) in zip(nbChangesConv, nbChangesConvBatch)]
+
+        # Compute error
+        # Compute averaged error over the sub-classes
+        predAve = torch.stack([item.sum(1) for item in freeState[0].split(args.expandOutput, dim=1)], 1) / args.expandOutput
+        targetsRed = torch.stack([item.sum(1) for item in targets.split(args.expandOutput, dim=1)], 1) / args.expandOutput
+        avePred += (torch.argmax(targetsRed, dim=1) != torch.argmax(predAve, dim=1)).int().sum(dim=0)
+
+        # Compute error computed on the first neuron of each sub class for single error
+        predSingle = torch.stack([item[:, 0] for item in freeState[0].split(args.expandOutput, dim=1)], 1)
+        singlePred += (torch.argmax(targetsRed, dim=1) != torch.argmax(predSingle, dim=1)).int().sum(dim=0)
+
+    aveTrainError = (avePred.float() / float(len(trainLoader.dataset))) * 100
+    singleTrainError = (singlePred.float() / float(len(trainLoader.dataset))) * 100
+
+    trainLoss = trainLoss / len(trainLoader.dataset)
+
+    return aveTrainError, singleTrainError, trainLoss, nbChangesFC, nbChangesConv
+
+def testConv(net, testLoader, epoch, args):
+    """Testing network with conv arch for one epoch"""
+    net.eval()
+
+    criterion = nn.MSELoss(reduction='sum')
+    avePred, singlePred, testLoss = 0, 0, 0
+
+    with torch.no_grad():
+        for batch_idx, (data, targets) in enumerate(testLoader):
+
+            state, indices = net.initHidden(data)
+
+            if net.cuda:
+                data, targets = data.to(net.device), targets.to(net.device)
+                for i in range(len(state)):
+                    state[i] = state[i].to(net.device)
+
+            # Free phase
+            state, indices = net.forward(state, indices, data)
+
+            # Loss
+            loss = (1 / (2 * state[0].size(0))) * criterion(state[0], targets)
+            testLoss += loss
+
+            # Compute error
+            # Compute averaged error over the sub-classes
+            predAve = torch.stack([item.sum(1) for item in state[0].split(args.expandOutput, dim=1)], 1) / args.expandOutput
+            targetsRed = torch.stack([item.sum(1) for item in targets.split(args.expandOutput, dim=1)], 1) / args.expandOutput
+            avePred += (torch.argmax(targetsRed, dim=1) != torch.argmax(predAve, dim=1)).int().sum(dim=0)
+
+            # compute error computed on the first neuron of each sub class
+            predSingle = torch.stack([item[:, 0] for item in state[0].split(args.expandOutput, dim=1)], 1)
+            singlePred += (torch.argmax(targetsRed, dim=1) != torch.argmax(predSingle, dim=1)).int().sum(dim=0)
+
+    aveTestError = (avePred.float() / float(len(testLoader.dataset))) * 100
+    singleTestError = (singlePred.float() / float(len(testLoader.dataset))) * 100
+
+    testLoss = testLoss / len(testLoader.dataset)
+
+    return aveTestError, singleTestError, testLoss
+

@@ -357,13 +357,16 @@ def main12():
     args.convList.reverse()
 
     trainLoader, _ = Data_Loader(args)()
-
     net = ConvWAInt(args)
 
     if net.cuda:
         net.to(net.device)
 
-    batch, (data, target) = next(iter(enumerate(trainLoader)))
+    print("Running on " + net.deviceName)
+
+    batch_idx, (data, target) = next(iter(enumerate(trainLoader)))
+
+    print(data.shape)
 
     state, indices = net.initHidden(data)
 
@@ -371,36 +374,38 @@ def main12():
         data, target = data.to(net.device), target.to(net.device)
         net.beta = net.beta.to(net.device)
 
-        for j in range(len(state)):
-            state[j] = state[j].to(net.device)
+        for i in range(len(state)):
+            state[i] = state[i].to(net.device)
 
+    ##############################
     T = 50
     Kmax = 50
 
-    save = [[] for i in range(len(state))]
+    save = [[] for k in range(len(state))]
 
-    # Free phase
-    for t in range(T):
-        state, indices = net.stepper(state, indices, data)
+    with torch.no_grad():
+        # Free phase
+        for t in range(T):
+            state, indices = net.stepper(state, indices, data)
 
-        save[0].append(state[0][32][350].item())
-        save[1].append(state[1][32][0][0][0].item())
-        save[2].append(state[2][32][0][0][0].item())
+            save[0].append(state[0][32][350].item())
+            save[1].append(state[1][32][0][0][0].item())
+            save[2].append(state[2][32][0][0][0].item())
 
-    for k in range(Kmax):
-        state, indices = net.stepper(state, indices, data, target=target, beta=net.beta)
+        freeState = state.copy()
+        freeIndices = indices.copy()
 
-        save[0].append(state[0][32][350].item())
-        save[1].append(state[1][32][0][0][0].item())
-        save[2].append(state[2][32][0][0][0].item())
+        # Nudged phase
+        for k in range(Kmax):
+            state, indices = net.stepper(state, indices, data, target=target, beta=net.beta, pred=freeState[0])
+
+            save[0].append(state[0][32][350].item())
+            save[1].append(state[1][32][0][0][0].item())
+            save[2].append(state[2][32][0][0][0].item())
 
     for layer in range(len(save)):
         plt.plot(save[layer])
 
     plt.show()
 
-
-
 main12()
-
-

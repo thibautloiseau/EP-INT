@@ -29,7 +29,6 @@ class Visualizer(SummaryWriter):
         self.args = args
         self.net = net
 
-
     def launch(self):
         """Launch the tensorboard server on localhost"""
         subprocess.Popen("tensorboard --logdir=\"" + os.path.dirname(self.path) + "\"", shell=True)
@@ -67,12 +66,26 @@ class Visualizer(SummaryWriter):
 
         return 0
 
-    def addNbChanges(self, nbChanges, epoch):
+    def addNbChanges(self, nbChanges, epoch, nbChangesConv=None):
         """Adding the number of weight flips to monitor training"""
-        for layer in range(len(self.args.layersList) - 1):
-            nbWeights = self.net.W[layer].weight.numel()
-            piLayerEpoch = np.log(nbChanges[layer] / nbWeights + np.exp(-9))
-            self.add_scalar("Weight flips for layer " + str(layer), piLayerEpoch, epoch)
+        if self.args.archi == 'fc':
+
+            for layer in range(len(self.args.layersList) - 1):
+                nbWeights = self.net.W[layer].weight.numel()
+                piLayerEpoch = np.log(nbChanges[layer] / nbWeights + np.exp(-9))
+                self.add_scalar("Weight flips for layer " + str(layer), piLayerEpoch, epoch)
+
+        elif self.args.archi == 'conv':
+
+            for layer in range(len(self.args.layersList) - 1):
+                nbWeights = self.net.fc[layer].weight.numel()
+                piLayerEpoch = np.log(nbChanges[layer] / nbWeights + np.exp(-9))
+                self.add_scalar("Weight flips for FC layer " + str(layer), piLayerEpoch, epoch)
+
+            for layer in range(len(self.args.layersList) - 1):
+                nbWeights = self.net.conv[layer].weight.numel()
+                piLayerEpoch = np.log(nbChangesConv[layer] / nbWeights + np.exp(-9))
+                self.add_scalar("Weight flips for conv layer " + str(layer), piLayerEpoch, epoch)
 
         return 0
 

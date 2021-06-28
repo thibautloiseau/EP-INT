@@ -249,6 +249,7 @@ class ConvWAInt(nn.Module):
         self.kernel = args.kernel
         self.padding = args.padding
         self.convTau = args.convTau
+        self.convGamma = args.convGamma
         self.nbConv = len(self.convList) - 1
 
         # FC layers parameters
@@ -256,9 +257,11 @@ class ConvWAInt(nn.Module):
         self.fc = nn.ModuleList(None)
         self.fcAccGradients = []
         self.fcTau = args.fcTau
+        self.fcGamma = args.fcGamma
         self.nbFC = len(self.fcList)
 
         self.hasBias = args.hasBias
+        self.lrBias = args.lrBias
 
         if args.dataset == 'MNIST' or args.dataset == 'FashionMNIST':
             inputSize = 28
@@ -338,33 +341,31 @@ class ConvWAInt(nn.Module):
 
         return binState
 
-    def stepper(self, state, indices, data, target=None, beta=0):
+    def stepper(self, state, indices, data, target=None, beta=0, pred=None):
         """Relaxation of the state during free and nudge phases"""
         preAct = state.copy()
         binState = self.getBinState(state)
 
         #####
         # Last fc layer (output of the network)
-        preAct[0] = self.fc[0](binState[1].view(binState[1].shape[0], -1))
-        preAct[0] *= self.activP(state[0])
+        preAct[0] = self.activP(state[0]) * self.fc[0](binState[1].view(binState[1].shape[0], -1))
 
         if beta != 0:
-            preAct[0] += beta * (target - state[0])
+            preAct[0] += beta * (target - pred)
 
         #####
         # Middle fc layer
         for layer in range(1, self.nbFC):
-            preAct[layer] = self.fc[layer](binState[layer+1].view(binState[layer+1].shape[0], -1))
-            preAct[layer] += torch.mm(binState[layer-1], self.fc[layer-1].weight)
-            preAct[layer] *= self.activP(state[layer])
+            preAct[layer] = self.activP(state[layer]) * \
+                            (self.fc[layer](binState[layer+1].view(binState[layer+1].shape[0], -1)) + torch.mm(binState[layer-1], self.fc[layer-1].weight))
 
         #####
         # Convolutional layers
         # Last conv layer
         pooledState, indice = self.pool(self.conv[0](binState[self.nbFC + 1]))
         indices[self.nbFC] = indice
-        preAct[self.nbFC] = pooledState + torch.mm(binState[self.nbFC - 1], self.fc[-1].weight).view(state[self.nbFC].shape)
-        preAct[self.nbFC] *= self.activP(state[self.nbFC])
+        preAct[self.nbFC] = self.activP(state[self.nbFC]) * \
+                            (pooledState + torch.mm(binState[self.nbFC - 1], self.fc[-1].weight).view(state[self.nbFC].shape))
 
         del pooledState, indice
 
@@ -382,9 +383,7 @@ class ConvWAInt(nn.Module):
                     weight=self.conv[layer - 1].weight,
                     padding=self.padding)
 
-            preAct[self.nbFC + layer] = pooledState
-            preAct[self.nbFC + layer] += unpoolState
-            preAct[self.nbFC + layer] *= self.activP(state[self.nbFC + layer])
+            preAct[self.nbFC + layer] = self.activP(state[self.nbFC + layer]) * (pooledState + unpoolState)
 
             del pooledState, unpoolState, indice, outputSize
 
@@ -405,14 +404,13 @@ class ConvWAInt(nn.Module):
 
         # Filtering and clamping all states
         for layer in range(len(state)):
-            state[layer] = 0.5 * (state[layer] + preAct[layer])
-            state[layer] = state[layer].clamp(self.neuronMin, self.neuronMax)
+            state[layer] = (0.5 * (state[layer] + preAct[layer])).clamp(self.neuronMin, self.neuronMax)
 
-        del preAct, binState
+        del preAct, binState, layer
 
         return state, indices
 
-    def forward(self, state, indices, data, beta=0, target=None):
+    def forward(self, state, indices, data, beta=0, target=None, pred=None):
         """Two state evolution for free and nudged phase"""
         with torch.no_grad():
             # Free phase
@@ -423,6 +421,117 @@ class ConvWAInt(nn.Module):
             # Nudged phase
             else:
                 for k in range(self.Kmax):
-                    state, indices = self.stepper(state, indices, data, target=target, beta=beta)
+                    state, indices = self.stepper(state, indices, data, target=target, beta=beta, pred=pred)
 
         return state, indices
+
+    def computeGradients(self, freeState, nudgedState, freeIndices, nudgedIndices, data):
+        """Compute the gradients on weights and biases"""
+        coef = 1. / float((self.beta * self.trainBatchSize))
+        freeBinState = self.getBinState(freeState)
+        nudgedBinState = self.getBinState(nudgedState)
+
+        gradFC, gradFCBias = [], []
+        gradConv, gradConvBias = [], []
+
+        # FC part of the network
+        for i in range(self.nbFC - 1):
+            gradFC.append(coef * (torch.mm(torch.transpose(nudgedBinState[i].view(nudgedBinState[i].size(0), -1), 0, 1), nudgedBinState[i + 1].view(nudgedBinState[i].size(0), -1)) -
+                                  torch.mm(torch.transpose(freeBinState[i].view(freeBinState[i].size(0), -1), 0, 1), freeBinState[i + 1].view(freeBinState[i].size(0), -1))))
+
+            gradFCBias.append(coef * (nudgedBinState[i] - freeBinState[i]).sum(0))
+
+        # Link between last conv and first FC layer
+        gradFC.append(coef * (torch.mm(torch.transpose(nudgedBinState[self.nbFC - 1], 0, 1), nudgedBinState[self.nbFC].view(nudgedBinState[self.nbFC].size(0), -1)) -
+                              torch.mm(torch.transpose(freeBinState[self.nbFC - 1], 0, 1), freeBinState[self.nbFC].view(freeBinState[self.nbFC].size(0), -1))))
+
+        gradFCBias.append(coef * (nudgedBinState[self.nbFC - 1] - freeBinState[self.nbFC - 1]).sum(0))
+
+        # Conv part of the network
+        for i in range(self.nbConv - 1):
+            outputSize = [nudgedBinState[self.nbFC + i].size(0), nudgedBinState[self.nbFC + i].size(1), self.sizeConvTab[i], self.sizeConvTab[i]]
+
+            gradConv.append(coef *
+                            (nn.functional.conv2d(
+                                nudgedBinState[self.nbFC + i + 1].permute(1, 0, 2, 3),
+                                self.unpool(nudgedBinState[self.nbFC + i], nudgedIndices[self.nbFC + i], output_size=outputSize).permute(1, 0, 2, 3),
+                                padding=self.padding) -
+                             nn.functional.conv2d(
+                                 freeBinState[self.nbFC + i + 1].permute(1, 0, 2, 3),
+                                 self.unpool(freeBinState[self.nbFC + i], freeIndices[self.nbFC + i], output_size=outputSize).permute(1, 0, 2, 3),
+                                 padding=self.padding))
+                            .permute(1, 0, 2, 3))
+
+            gradConvBias.append(coef * (
+                    self.unpool(nudgedBinState[self.nbFC + i], nudgedIndices[self.nbFC + i], output_size=outputSize) -
+                    self.unpool(freeBinState[self.nbFC + i], freeIndices[self.nbFC + i], output_size=outputSize))
+                    .permute(1, 0, 2, 3).contiguous().view(nudgedBinState[self.nbFC + i].size(1), -1).sum(1))
+
+        outputSize = [nudgedBinState[-1].size(0), nudgedBinState[-1].size(1), self.sizeConvTab[-2], self.sizeConvTab[-2]]
+
+        gradConv.append(coef *
+                        (nn.functional.conv2d(
+                            data.permute(1, 0, 2, 3), self.unpool(nudgedBinState[-1], nudgedIndices[-1], output_size=outputSize).permute(1, 0, 2, 3), padding=self.padding) -
+                         nn.functional.conv2d(
+                            data.permute(1, 0, 2, 3), self.unpool(freeBinState[-1], freeIndices[-1], output_size=outputSize).permute(1, 0, 2, 3), padding=self.padding))
+                        .permute(1, 0, 2, 3))
+
+        gradConvBias.append(coef * (
+                self.unpool(nudgedBinState[-1], nudgedIndices[-1], output_size=outputSize) -
+                self.unpool(freeBinState[-1], freeIndices[-1], output_size=outputSize))
+                .permute(1, 0, 2, 3).contiguous().view(nudgedBinState[-1].size(1), -1).sum(1))
+
+        # Accumulating gradients
+        if (self.fcAccGradients == []) or (self.convAccGradients == []):
+            self.fcAccGradients = [
+                (1 - self.fcGamma[i]) * 2 * self.fcGamma[i] * torch.randn(w_list.size()).to(self.device) + self.fcGamma[i] * w_list
+                for (i, w_list) in enumerate(gradFC)]
+
+            self.convAccGradients = [
+                (1 - self.convGamma[i]) * 2 * self.convGamma[i] * torch.randn(w_list.size()).to(self.device) +
+                self.convGamma[i] * w_list for (i, w_list) in enumerate(gradConv)]
+
+        else:
+            self.fcAccGradients = [torch.add((1 - self.fcGamma[i]) * x1, self.fcGamma[i] * x2) for i, (x1, x2) in enumerate(zip(self.fcAccGradients, gradFC))]
+
+            self.convAccGradients = [torch.add((1 - self.convGamma[i]) * x1, self.convGamma[i] * x2) for i, (x1, x2) in enumerate(zip(self.convAccGradients, gradConv))]
+
+        gradFC = self.fcAccGradients
+        gradConv = self.convAccGradients
+
+        return gradFC, gradFCBias, gradConv, gradConvBias
+
+    def updateWeight(self, freeState, nudgedState, freeIndices, nudgedIndices, data):
+
+        with torch.no_grad():
+            gradFC, gradFCBias, gradConv, gradConvBias = self.computeGradients(freeState, nudgedState, freeIndices, nudgedIndices, data)
+            nbChangesFC, nbChangesConv = [], []
+
+            for i in range(self.nbFC):
+                # Update weights
+                tauTensor = self.fcTau[i] * torch.ones(self.fc[i].weight.shape).to(self.device)
+                modifyTensor = -1 * torch.sign((-1 * torch.sign(self.fc[i].weight) * gradFC[i] >= tauTensor).int() - 0.5)
+
+                self.fc[i].weight.data = torch.mul(self.fc[i].weight.data, modifyTensor)
+
+                nbChangesFC.append(torch.sum(abs(modifyTensor - 1)).item() / 2)
+
+                # Update bias
+                if self.hasBias:
+                    self.fc[i].bias += self.lrBias[i] * gradFCBias[i]
+
+            for i in range(self.nbConv):
+                # Update weights
+                tauTensor = self.convTau[i] * torch.ones(self.conv[i].weight.size()).to(self.device)
+                modifyTensor = -1 * torch.sign((-1 * torch.sign(self.conv[i].weight) * gradConv[i] >= tauTensor).int() - 0.5)
+
+                self.conv[i].weight.data = torch.mul(self.conv[i].weight.data, modifyTensor)
+
+                nbChangesConv.append(torch.sum(abs(modifyTensor - 1)).item() / 2)
+
+                # Update bias
+                if self.hasBias:
+                    self.conv[i].bias += self.lrBias[i + len(self.fc)] * gradConvBias[i]
+
+        return nbChangesFC, nbChangesConv
+
