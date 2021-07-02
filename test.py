@@ -230,22 +230,22 @@ def main6():
             for k in range(len(state)):
                 save[k].append(state[k][0][99].item())
 
-        # # See evolution of states
-        # for k in range(len(freeState)):
-        #     plt.plot(save[k])
-        #     plt.title('layer ' + str(k))
-        #     plt.show()
-
-        nudgedState = state.copy()
-
-        gradW, gradBias = net.computeGradients(freeState, nudgedState)
-
-        for k in range(len(gradW)):
-            print('Weights layer ' + str(k))
-            gradw = gradW[k].tolist()
-            plt.plot(gradw, '+')
-            plt.title('Weights layer ' + str(k))
+        # See evolution of states
+        for k in range(len(freeState)):
+            plt.plot(save[k])
+            plt.title('layer ' + str(k))
             plt.show()
+
+        # nudgedState = state.copy()
+        #
+        # gradW, gradBias = net.computeGradients(freeState, nudgedState)
+        #
+        # for k in range(len(gradW)):
+        #     print('Weights layer ' + str(k))
+        #     gradw = gradW[k].tolist()
+        #     plt.plot(gradw, '+')
+        #     plt.title('Weights layer ' + str(k))
+        #     plt.show()
 
 
         # for k in range(len(gradBias)):
@@ -356,56 +356,199 @@ def main12():
     args.layersList.reverse()
     args.convList.reverse()
 
-    trainLoader, _ = Data_Loader(args)()
-    net = ConvWAInt(args)
+    for l in range(10):
 
-    if net.cuda:
-        net.to(net.device)
+        trainLoader, _ = Data_Loader(args)()
+        net = ConvWAInt(args)
 
-    print("Running on " + net.deviceName)
+        if net.cuda:
+            net.to(net.device)
 
-    batch_idx, (data, target) = next(iter(enumerate(trainLoader)))
+        print("Running on " + net.deviceName)
 
-    print(data.shape)
+        batch_idx, (data, target) = next(iter(enumerate(trainLoader)))
 
-    state, indices = net.initHidden(data)
+        state, indices = net.initHidden(data)
 
-    if net.cuda:
-        data, target = data.to(net.device), target.to(net.device)
-        net.beta = net.beta.to(net.device)
+        if net.cuda:
+            data, target = data.to(net.device), target.to(net.device)
+            net.beta = net.beta.to(net.device)
 
-        for i in range(len(state)):
-            state[i] = state[i].to(net.device)
+            for i in range(len(state)):
+                state[i] = state[i].to(net.device)
 
-    ##############################
-    T = 50
-    Kmax = 50
+        ##############################
+        T = 50
+        Kmax = 50
 
-    save = [[] for k in range(len(state))]
+        save = [[] for k in range(len(state))]
 
-    with torch.no_grad():
+        with torch.no_grad():
+            # Free phase
+            for t in range(T):
+                state, indices = net.stepper(state, indices, data)
+
+                save[0].append(state[0][32][350].item())
+                save[1].append(state[1][32][0][0][0].item())
+                save[2].append(state[2][32][0][0][0].item())
+
+            freeState = state.copy()
+
+            # Nudged phase
+            for k in range(Kmax):
+                state, indices = net.stepper(state, indices, data, target=target, beta=net.beta, pred=freeState[0])
+
+                save[0].append(state[0][32][350].item())
+                save[1].append(state[1][32][0][0][0].item())
+                save[2].append(state[2][32][0][0][0].item())
+
+        for layer in range(len(save)):
+            plt.plot(save[layer])
+
+        plt.show()
+
+# main12()
+
+########################################################################################################################
+# Init of weights on FC arch
+
+def main13():
+    args.layersList = [100, 8192, 784]
+
+    net = FCbinWAInt(args)
+
+    print(net.W[0].weight.data)
+
+    net.W[0].weight.data[:, ::2] = torch.ones(size=net.W[0].weight.data[:, ::2].shape)
+    net.W[0].weight.data[:, 1::2] = -torch.ones(size=net.W[0].weight.data[:, 1::2].shape)
+
+    print(net.W[0].weight.data)
+    print(net.W[0].weight.data.shape)
+
+    return
+
+# main13()
+
+########################################################################################################################
+# Testing "analytical" solution for relaxation
+
+def main14():
+    args.layersList = [100, 8192, 784]
+    args.archi = 'fc'
+
+    for i in range(10):
+        net = FCbinWAInt(args)
+
+        # Creating dataloaders only for training first
+        trainLoader, _ = Data_Loader(args)()
+
+        if net.cuda:
+            net.to(net.device)
+
+        batch_idx, (data, target) = next(iter(enumerate(trainLoader)))
+
+        # We initialize the first layer with input data
+        state = net.initHidden(data)
+
+        # Sending tensors to GPU if available
+        if net.cuda:
+            target = target.to(net.device)
+            net.beta = net.beta.to(net.device)
+
+            for k in range(len(state)):
+                state[k] = state[k].to(net.device)
+
+        # Keep track of the states during free phase to see evolution
+        # For output
+
+        save = []
+
+        for k in range(len(state)):
+            save.append([])
+            save[-1].append(state[k][0][50].item())
+
+        #####
         # Free phase
-        for t in range(T):
-            state, indices = net.stepper(state, indices, data)
+        T = 16
 
-            save[0].append(state[0][32][350].item())
-            save[1].append(state[1][32][0][0][0].item())
-            save[2].append(state[2][32][0][0][0].item())
+        analyticalState = net.analytical(state)
+        print(analyticalState)
+
+        for step in range(T):
+            state = net.stepper(state)
+
+            for k in range(len(state)):
+                save[k].append(state[k][0][50].item())
+
+        print(state)
 
         freeState = state.copy()
-        freeIndices = indices.copy()
 
-        # Nudged phase
-        for k in range(Kmax):
-            state, indices = net.stepper(state, indices, data, target=target, beta=net.beta, pred=freeState[0])
+        # # See evolution of free state
+        # for k in range(len(freeState)):
+        #     plt.plot(save[k])
+        #     plt.title('layer ' + str(k))
+        #     plt.show()
 
-            save[0].append(state[0][32][350].item())
-            save[1].append(state[1][32][0][0][0].item())
-            save[2].append(state[2][32][0][0][0].item())
+    return
 
-    for layer in range(len(save)):
-        plt.plot(save[layer])
+# main14()
 
-    plt.show()
+########################################################################################################################
+# Generation of data with trained model by going backward
 
-main12()
+def main15():
+    model = torch.load("./SAVE-fc-MNIST/2021-06-30/S7/checkpoint.pt")['modelStateDict']
+    net = FCbinWAInt(args)
+
+    print(model)
+
+    def stepper(state):
+        """Evolution of the state during free phase or nudged phase"""
+        preAct = state.copy()
+        binState = net.getBinState(state)
+        binStateP = net.getBinStateP(state)
+
+        # We compute the pre-activation for each layer
+        preAct[0] = binStateP[0] * model['W.0.weight'](binState[1])
+
+        for layer in range(1, len(state)):
+            # Previous layer contribution
+            preAct[layer] = binStateP[layer] * model.W[layer](binState[layer + 1])
+            # Next layer contribution
+            preAct[layer] += binStateP[layer] * torch.mm(binState[layer - 1], model.W[layer - 1].weight)
+            # Updating, filtering, and clamping the pre-activations
+            state[layer] = (0.5 * (state[layer] + preAct[layer])).int().float().clamp(0, net.maxIntState)
+
+        state[0] = (0.5 * (state[0] + preAct[0])).int().float().clamp(0, net.maxIntState)
+
+        return state
+
+    state = []
+
+    # Init state
+    for layer in range(len(net.layersList)):
+        state.append(torch.zeros(net.trainBatchSize, net.layersList[layer], requires_grad=False))
+
+    T = 16
+
+    for i in range(T):
+        state = stepper(state)
+
+    print(state[-1])
+
+    return
+
+# main15()
+
+########################################################################################################################
+# Testing for accumulated gradients
+
+def main16():
+    a = torch.randn(size=(10, 10))
+    print(a)
+    print(a[torch.where(torch.abs(a) > 1)])
+
+    return
+
+main16()

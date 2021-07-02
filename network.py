@@ -1,9 +1,11 @@
+import matplotlib.pyplot as plt
 import torch
 
 from tools import *
+import torch.nn.functional as F
 
 # ======================================================================================================================
-# ==================================== FC architecture - Binarized weights and synapses ================================
+# ==================================== FC architecture - Binary weights and synapses ================================
 # ======================================================================================================================
 
 class FCbinWAInt(nn.Module):
@@ -32,26 +34,24 @@ class FCbinWAInt(nn.Module):
         self.constNudge = args.constNudge
 
         self.hasBias = args.hasBias
+        self.maxIntBias = 2**(args.bitsBias - 1) - 1
+
+        self.stochInput = args.stochInput
 
         # Batch sizes
         self.trainBatchSize = args.trainBatchSize
         self.testBatchSize = args.testBatchSize
 
-        # Scaling factors
-        self.alphasInt = []
-
         # Int coding
         # For states
-        self.bitsState = args.bitsState
-        self.maxIntState = 2**(self.bitsState - 1) - 1
+        self.maxIntState = 2**(args.bitsState - 1) - 1
 
         # Parameters of BOP
         self.tauInt = args.tauInt
 
-        # Initialize the accumulated gradients for the batch, clamping and reinitializing gradients
+        # Initialize the accumulated gradients for the batch, clamping
         self.accGradientsInt = []
-        self.clampMom = args.clampMom
-        self.reinitGrad = args.reinitGrad
+        self.maxMom = 2**(args.bitsMom - 1) - 1
 
         # Initialize the network according to the layersList given with XNOR-net method
         self.W = nn.ModuleList(None)
@@ -61,15 +61,12 @@ class FCbinWAInt(nn.Module):
                 if self.hasBias:
                     self.W.extend([nn.Linear(self.layersList[i+1], self.layersList[i], bias=True)])
                     self.W[-1].bias.data = torch.zeros(size=self.W[-1].bias.data.shape)
-                    # self.W[-1].bias.data = int(1 / (2 * np.sqrt(self.layersList[i+1])) * self.maxIntState) * torch.sign(self.W[-1].bias)
 
                 else:
                     self.W.extend([nn.Linear(self.layersList[i+1], self.layersList[i], bias=False)])
 
                 alphaInt = int(1 / (2 * np.sqrt(self.layersList[i+1])) * self.maxIntState)
-                self.alphasInt.append(alphaInt)
                 self.W[-1].weight.data = alphaInt * torch.sign(self.W[-1].weight)
-
 
     def initHidden(self, data):
         """Initialize the neurons"""
@@ -77,29 +74,33 @@ class FCbinWAInt(nn.Module):
         size = data.shape[0]
 
         for layer in range(len(self.layersList)):
-            state.append(self.maxIntState / 2 * torch.ones(size, self.layersList[layer], requires_grad=False))
+            # state.append(self.maxIntState / 2 * torch.ones(size, self.layersList[layer], requires_grad=False))
+            state.append(torch.zeros(size, self.layersList[layer], requires_grad=False))
 
-        # We initialize the input neurons with stochastic binary input data
-        for i in range(8):
-            randV = torch.rand(size=data.shape)
-            stoch = (randV < data).int()
-            # first_layer = self.W[-2](stoch).to(self.device)
-            # print(first_layer)
+        if self.stochInput:
+            stoch = torch.zeros(data.shape)
+            # We initialize the input neurons with stochastic binary input data
+            for i in range(8):
+                randV = torch.rand(size=data.shape)
+                stoch += (randV < data).float().clamp(0, 7)  # 3 bits for inputs when summing
 
-        # We initialize the inputs with the last stochastic example, as the dynamics depends on the input
-        state[-1] = data.float()
+            stoch = (stoch >= 4).float()  # We binarize the sum of stochastic inputs with some kind of activation
+
+            # We initialize the input with the last stochastic example for first try, as the dynamics depends on the input
+            state[-1] = stoch
+
+        else:
+            state[-1] = data.float()
 
         return state
 
     def activ(self, x):
         """Activation function for other layers (integers)"""
-        return (x >= self.maxIntState / 2).int().float()
-        # return torch.sign(x - self.maxIntState / 2).int().float()
+        return (x >= self.maxIntState / 2).float()
 
     def activP(self, x):
         """Derivative of activation function for other layers (integer)"""
-        return ((x >= 0) & (x <= self.maxIntState)).int().float()
-        # return 2 * (((x >= 0) & (x <= self.maxIntState)).int() - 0.5).int().float()
+        return ((x >= 0) & (x <= self.maxIntState)).float()
 
     def getBinState(self, state):
         """Get the binary activation of the pre-activations"""
@@ -173,18 +174,20 @@ class FCbinWAInt(nn.Module):
             for layer in range(len(freeState) - 1):
                 gradWInt.append(
                                 (torch.mm(torch.transpose(nudgedBinState[layer], 0, 1), nudgedBinState[layer + 1]) -
-                                 torch.mm(torch.transpose(freeBinState[layer], 0, 1), freeBinState[layer + 1])).clamp(-8, 7)
+                                 torch.mm(torch.transpose(freeBinState[layer], 0, 1), freeBinState[layer + 1])).clamp(-8, 7)  # 4 bits for weight gradients
                                 )
 
                 if self.hasBias:
-                    gradBias.append((nudgedBinState[layer] - freeBinState[layer]).sum(0).clamp(-8, 7))
+                    gradBias.append((nudgedBinState[layer] - freeBinState[layer]).sum(0).clamp(-8, 7))  # 4 bits for bias gradients
 
             # We initialize the accumulated gradients for first iteration or BOP
             if self.accGradientsInt == []:
+                # self.accGradientsInt = [(0.5 * gradWInt[i]).int() for i in range(len(gradWInt))]
                 self.accGradientsInt = gradWInt
 
             else:
-                self.accGradientsInt = [(g.int() + m.int()).clamp(-self.clampMom[i], self.clampMom[i]) for i, (g, m) in enumerate(zip(gradWInt, self.accGradientsInt))]
+                # self.accGradientsInt = [((0.5 * g).int() + m.int()).clamp(-self.maxMom + 1, self.maxMom) for i, (g, m) in enumerate(zip(gradWInt, self.accGradientsInt))]
+                self.accGradientsInt = [(g.int() + m.int()).clamp(-self.maxMom + 1, self.maxMom) for i, (g, m) in enumerate(zip(gradWInt, self.accGradientsInt))]
 
             gradWInt = self.accGradientsInt
 
@@ -205,19 +208,14 @@ class FCbinWAInt(nn.Module):
 
                 self.W[layer].weight.data = torch.mul(self.W[layer].weight.data, modifyWeightsInt)
 
-                # We reinitialize the accumulated gradients to 0 if the weight has been flipped
-                if self.reinitGrad:
-                    modifyGradInt = ((modifyWeightsInt + 1) / 2).int()
-                    self.accGradientsInt[layer] = torch.mul(self.accGradientsInt[layer], modifyGradInt)
-
                 # Biases updates
                 if self.hasBias:
-                    self.W[layer].bias += gradBias[layer]
+                    self.W[layer].bias.data = (self.W[layer].bias + gradBias[layer]).clamp(-self.maxIntBias + 1, self.maxIntBias)
 
         return noChanges
 
 # ======================================================================================================================
-# ==================================== Conv architecture - Binarized weights and synapses ==============================
+# ==================================== Conv architecture - Binary weights and synapses ==============================
 # ======================================================================================================================
 
 class ConvWAInt(nn.Module):
@@ -253,7 +251,7 @@ class ConvWAInt(nn.Module):
         self.nbConv = len(self.convList) - 1
 
         # FC layers parameters
-        self.fcList = args.layersList
+        self.fcList = args.layersList.copy()
         self.fc = nn.ModuleList(None)
         self.fcAccGradients = []
         self.fcTau = args.fcTau
@@ -271,8 +269,8 @@ class ConvWAInt(nn.Module):
         self.sizeConvPoolTab = [inputSize]
         self.sizeConvTab = [inputSize]
 
+        # For conv part
         with torch.no_grad():
-            # For conv part
             for i in range(self.nbConv):
                 if self.hasBias:
                     self.conv.append(nn.Conv2d(self.convList[i+1], self.convList[i], self.kernel, padding=self.padding, bias=True))
@@ -296,8 +294,8 @@ class ConvWAInt(nn.Module):
 
         self.fcList.append(self.convList[0] * self.sizeConvPoolTab[0]**2)
 
+        # For FC part
         with torch.no_grad():
-            # For FC part
             for i in range(self.nbFC):
                 if self.hasBias:
                     self.fc.append(nn.Linear(self.fcList[i + 1], self.fcList[i], bias=True))
@@ -326,11 +324,11 @@ class ConvWAInt(nn.Module):
 
     def activ(self, x):
         """Activation function"""
-        return (x >= 0.5).int().float()
+        return (x >= 0.5).float()
 
     def activP(self, x):
         """Derivative of the activation function"""
-        return ((x >= 0) & (x <= 1)).int().float()
+        return ((x >= 0) & (x <= 1)).float()
 
     def getBinState(self, state):
         """Get the binary state of pre-activations"""
@@ -354,7 +352,7 @@ class ConvWAInt(nn.Module):
             preAct[0] += beta * (target - pred)
 
         #####
-        # Middle fc layer
+        # Middle fc layers
         for layer in range(1, self.nbFC):
             preAct[layer] = self.activP(state[layer]) * \
                             (self.fc[layer](binState[layer+1].view(binState[layer+1].shape[0], -1)) + torch.mm(binState[layer-1], self.fc[layer-1].weight))
@@ -378,7 +376,7 @@ class ConvWAInt(nn.Module):
             if indices[self.nbFC + layer - 1] is not None:
                 outputSize = [state[self.nbFC + layer - 1].size(0), state[self.nbFC + layer - 1].size(1), self.sizeConvTab[layer - 1], self.sizeConvTab[layer - 1]]
 
-                unpoolState = nn.functional.conv_transpose2d(
+                unpoolState = F.conv_transpose2d(
                     self.unpool(binState[self.nbFC + layer - 1], indices[self.nbFC + layer - 1], output_size=outputSize),
                     weight=self.conv[layer - 1].weight,
                     padding=self.padding)
@@ -393,7 +391,7 @@ class ConvWAInt(nn.Module):
         indices[-1] = indice
         if indices[-2] is not None:
             outputSize = [state[-2].size(0), state[-2].size(1), self.sizeConvTab[-3], self.sizeConvTab[-3]]
-            unpoolState = nn.functional.conv_transpose2d(
+            unpoolState = F.conv_transpose2d(
                 self.unpool(binState[-2], indices[-2], output_size=outputSize),
                 weight=self.conv[-2].weight,
                 padding=self.padding)
@@ -454,11 +452,11 @@ class ConvWAInt(nn.Module):
             outputSize = [nudgedBinState[self.nbFC + i].size(0), nudgedBinState[self.nbFC + i].size(1), self.sizeConvTab[i], self.sizeConvTab[i]]
 
             gradConv.append(coef *
-                            (nn.functional.conv2d(
+                            (F.conv2d(
                                 nudgedBinState[self.nbFC + i + 1].permute(1, 0, 2, 3),
                                 self.unpool(nudgedBinState[self.nbFC + i], nudgedIndices[self.nbFC + i], output_size=outputSize).permute(1, 0, 2, 3),
                                 padding=self.padding) -
-                             nn.functional.conv2d(
+                             F.conv2d(
                                  freeBinState[self.nbFC + i + 1].permute(1, 0, 2, 3),
                                  self.unpool(freeBinState[self.nbFC + i], freeIndices[self.nbFC + i], output_size=outputSize).permute(1, 0, 2, 3),
                                  padding=self.padding))
@@ -470,13 +468,18 @@ class ConvWAInt(nn.Module):
                         self.unpool(freeBinState[self.nbFC + i], freeIndices[self.nbFC + i], output_size=outputSize))
                         .permute(1, 0, 2, 3).contiguous().view(nudgedBinState[self.nbFC + i].size(1), -1).sum(1))
 
+        # Input of the network
         outputSize = [nudgedBinState[-1].size(0), nudgedBinState[-1].size(1), self.sizeConvTab[-2], self.sizeConvTab[-2]]
 
         gradConv.append(coef *
-                        (nn.functional.conv2d(
-                            data.permute(1, 0, 2, 3), self.unpool(nudgedBinState[-1], nudgedIndices[-1], output_size=outputSize).permute(1, 0, 2, 3), padding=self.padding) -
-                         nn.functional.conv2d(
-                            data.permute(1, 0, 2, 3), self.unpool(freeBinState[-1], freeIndices[-1], output_size=outputSize).permute(1, 0, 2, 3), padding=self.padding))
+                        (F.conv2d(
+                            data.permute(1, 0, 2, 3),
+                            self.unpool(nudgedBinState[-1], nudgedIndices[-1], output_size=outputSize).permute(1, 0, 2, 3),
+                            padding=self.padding) -
+                         F.conv2d(
+                            data.permute(1, 0, 2, 3),
+                            self.unpool(freeBinState[-1], freeIndices[-1], output_size=outputSize).permute(1, 0, 2, 3),
+                            padding=self.padding))
                         .permute(1, 0, 2, 3))
 
         if self.hasBias:
@@ -496,9 +499,9 @@ class ConvWAInt(nn.Module):
                 self.convGamma[i] * w_list for (i, w_list) in enumerate(gradConv)]
 
         else:
-            self.fcAccGradients = [torch.add((1 - self.fcGamma[i]) * x1, self.fcGamma[i] * x2) for i, (x1, x2) in enumerate(zip(self.fcAccGradients, gradFC))]
+            self.fcAccGradients = [torch.add((1 - self.fcGamma[i]) * m, self.fcGamma[i] * g) for i, (m, g) in enumerate(zip(self.fcAccGradients, gradFC))]
 
-            self.convAccGradients = [torch.add((1 - self.convGamma[i]) * x1, self.convGamma[i] * x2) for i, (x1, x2) in enumerate(zip(self.convAccGradients, gradConv))]
+            self.convAccGradients = [torch.add((1 - self.convGamma[i]) * m, self.convGamma[i] * g) for i, (m, g) in enumerate(zip(self.convAccGradients, gradConv))]
 
         gradFC = self.fcAccGradients
         gradConv = self.convAccGradients
@@ -515,7 +518,6 @@ class ConvWAInt(nn.Module):
                 # Update weights
                 tauTensor = self.fcTau[i] * torch.ones(self.fc[i].weight.shape).to(self.device)
                 modifyTensor = -1 * torch.sign((-1 * torch.sign(self.fc[i].weight) * gradFC[i] >= tauTensor).int() - 0.5)
-
                 self.fc[i].weight.data = torch.mul(self.fc[i].weight.data, modifyTensor)
 
                 nbChangesFC.append(torch.sum(abs(modifyTensor - 1)).item() / 2)
@@ -528,7 +530,6 @@ class ConvWAInt(nn.Module):
                 # Update weights
                 tauTensor = self.convTau[i] * torch.ones(self.conv[i].weight.size()).to(self.device)
                 modifyTensor = -1 * torch.sign((-1 * torch.sign(self.conv[i].weight) * gradConv[i] >= tauTensor).int() - 0.5)
-
                 self.conv[i].weight.data = torch.mul(self.conv[i].weight.data, modifyTensor)
 
                 nbChangesConv.append(torch.sum(abs(modifyTensor - 1)).item() / 2)

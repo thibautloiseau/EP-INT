@@ -36,7 +36,7 @@ class Visualizer(SummaryWriter):
         return 0
 
     def saveHyperParameters(self):
-        """Save all arguments given by user in json file"""
+        """Save code and all arguments given by user in json file"""
         with open(os.path.join(self.path, 'hyperparameters.json'), 'w') as file:
             json.dump(vars(self.args), file, indent=4)
 
@@ -46,7 +46,7 @@ class Visualizer(SummaryWriter):
         os.makedirs(os.path.join(self.path, 'code'))
 
         for file in code:
-            shutil.copyfile(file, os.path.join(self.path, 'code',file))
+            shutil.copyfile(file, os.path.join(self.path, 'code', file))
 
         return 0
 
@@ -77,12 +77,12 @@ class Visualizer(SummaryWriter):
 
         elif self.args.archi == 'conv':
 
-            for layer in range(len(self.args.layersList) - 1):
+            for layer in range(len(self.args.layersList)):
                 nbWeights = self.net.fc[layer].weight.numel()
                 piLayerEpoch = np.log(nbChanges[layer] / nbWeights + np.exp(-9))
                 self.add_scalar("Weight flips for FC layer " + str(layer), piLayerEpoch, epoch)
 
-            for layer in range(len(self.args.layersList) - 1):
+            for layer in range(len(self.args.convList) - 1):
                 nbWeights = self.net.conv[layer].weight.numel()
                 piLayerEpoch = np.log(nbChangesConv[layer] / nbWeights + np.exp(-9))
                 self.add_scalar("Weight flips for conv layer " + str(layer), piLayerEpoch, epoch)

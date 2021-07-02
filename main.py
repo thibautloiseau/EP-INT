@@ -31,18 +31,18 @@ parser.add_argument(
 parser.add_argument(
     '--archi',
     type=str,
-    default='conv',
+    default='fc',
     help='Architecture of the network (default: fc, others: conv)')
 parser.add_argument(
     '--layersList',
     nargs='+',
     type=int,
-    default=[700],
+    default=[784, 8192, 100],
     help='List of layer sizes (default: 1 fc hidden layers (4096))')
 parser.add_argument(
     '--expandOutput',
     type=int,
-    default=70,
+    default=10,
     help='Quantity by how much we expand the output layer)')
 parser.add_argument(
     '--trainBatchSize',
@@ -57,13 +57,13 @@ parser.add_argument(
 parser.add_argument(
     '--T',
     type=int,
-    default=32,
+    default=16,
     metavar='T',
     help='Number of time steps in the free phase (default: 50)')
 parser.add_argument(
     '--Kmax',
     type=int,
-    default=32,
+    default=16,
     metavar='Kmax',
     help='Number of time steps in the backward pass (default: 10)')
 parser.add_argument(
@@ -80,46 +80,51 @@ parser.add_argument(
     '--tauInt',
     nargs='+',
     type=int,
-    default=[10, 6],
-    help='Thresholds used for the binary optimization in BOP')
+    default=[0, 0],
+    help='Thresholds used for BOP')
 parser.add_argument(
-    '--clampMom',
+    '--bitsMom',
     nargs='+',
     type=int,
-    default= [2**7, 2**7],
-    help='Clamp the momentum for each layer')
+    default=6,
+    help='Number of bits for the momentum')
 # Training settings
 parser.add_argument(
     '--hasBias',
     type=int,
-    default=0,
+    default=1,
     help='Does the network has biases ? (default: 1, other: 0)')
 parser.add_argument(
     '--epochs',
     type=int,
     default=50,
     metavar='N',
-    help='number of epochs to train (default: 2)')
+    help='Number of epochs to train (default: 2)')
 parser.add_argument(
     '--bitsState',
     type=int,
-    default=2,
+    default=10,
     help='Number of bits for states in signed int coding')
+parser.add_argument(
+    '--bitsBias',
+    type=int,
+    default=4,
+    help='Number of bits for biases in signed int coding')
 parser.add_argument(
     '--decay',
     type=int,
-    default=1,
-    help='Quantity by which we multiply the threshold for BOP')
+    default=2,
+    help='Quantity by which we multiply the threshold for BOP after a certain number of epochs')
 parser.add_argument(
     '--constNudge',
     type=int,
-    default=0,
+    default=1,
     help='Apply a constant nudge in nudging phase (default: 0)')
 parser.add_argument(
-    '--reinitGrad',
+    '--stochInput',
     type=int,
-    default=0,
-    help='Reinitialize the accumulated gradients if the weight has been flipped (default: 0, others: 1)')
+    default=1,
+    help='Get stochastic binarized inputs')
 parser.add_argument(
     '--lrBias',
     nargs='+',
@@ -174,11 +179,10 @@ parser.add_argument(
     default=[5e-8, 5e-8],
     help='Gamma for conv part for BOP')
 
-
-
 args = parser.parse_args()
 
 if __name__ == '__main__':
+
     # We reverse the layersList according to the convention that the output is 0 indexed
     args.layersList.reverse()
     args.convList.reverse()

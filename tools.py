@@ -18,7 +18,7 @@ def trainFC(net, trainLoader, epoch, args):
     nbChanges = [0. for k in range(len(net.layersList) - 1)]
 
     # Decay
-    if epoch % 3 == 0 and epoch != 0:
+    if epoch % 5 == 0 and epoch != 0:
         for k in range(len(args.tauInt)):
             args.tauInt[k] = args.tauInt[k] * args.decay
 
@@ -64,6 +64,8 @@ def trainFC(net, trainLoader, epoch, args):
         # compute error computed on the first neuron of each sub class
         singlePred = torch.stack([item[:, 0] for item in freeState[0].split(args.expandOutput, dim=1)], 1)
         singleFalsePred += (torch.argmax(targetsRed, dim=1) != torch.argmax(singlePred, dim=1)).int().sum(dim=0)
+
+    print(net.accGradientsInt)
 
     # We compute the error for the whole epoch
     aveTrainError = aveFalsePred.float() / float(len(trainLoader.dataset)) * 100
@@ -176,7 +178,7 @@ def trainConv(net, trainLoader, epoch, args):
 
     trainLoss = trainLoss / len(trainLoader.dataset)
 
-    return aveTrainError, singleTrainError, trainLoss, nbChangesFC, nbChangesConv
+    return aveTrainError.item(), singleTrainError.item(), trainLoss.item(), nbChangesFC, nbChangesConv
 
 def testConv(net, testLoader, args):
     """Testing network with conv arch for one epoch"""
@@ -217,5 +219,5 @@ def testConv(net, testLoader, args):
 
     testLoss = testLoss / len(testLoader.dataset)
 
-    return aveTestError, singleTestError, testLoss
+    return aveTestError.item(), singleTestError.item(), testLoss.item()
 
