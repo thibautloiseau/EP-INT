@@ -182,12 +182,12 @@ class FCbinWAInt(nn.Module):
 
             # We initialize the accumulated gradients for first iteration or BOP
             if self.accGradientsInt == []:
-                # self.accGradientsInt = [(0.5 * gradWInt[i]).int() for i in range(len(gradWInt))]
-                self.accGradientsInt = gradWInt
+                self.accGradientsInt = [(0.5 * gradWInt[i]).int() for i in range(len(gradWInt))]
+                # self.accGradientsInt = gradWInt
 
             else:
-                # self.accGradientsInt = [((0.5 * g).int() + m.int()).clamp(-self.maxMom + 1, self.maxMom) for i, (g, m) in enumerate(zip(gradWInt, self.accGradientsInt))]
-                self.accGradientsInt = [(g.int() + m.int()).clamp(-self.maxMom + 1, self.maxMom) for i, (g, m) in enumerate(zip(gradWInt, self.accGradientsInt))]
+                self.accGradientsInt = [((0.5 * g).int() + m.int()).clamp(-self.maxMom + 1, self.maxMom) for i, (g, m) in enumerate(zip(gradWInt, self.accGradientsInt))]
+                # self.accGradientsInt = [(g.int() + m.int()).clamp(-self.maxMom + 1, self.maxMom) for i, (g, m) in enumerate(zip(gradWInt, self.accGradientsInt))]
 
             gradWInt = self.accGradientsInt
 
@@ -490,13 +490,9 @@ class ConvWAInt(nn.Module):
 
         # Accumulating gradients
         if (self.fcAccGradients == []) or (self.convAccGradients == []):
-            self.fcAccGradients = [
-                (1 - self.fcGamma[i]) * 2 * self.fcGamma[i] * torch.randn(w_list.size()).to(self.device) + self.fcGamma[i] * w_list
-                for (i, w_list) in enumerate(gradFC)]
+            self.fcAccGradients = [self.fcGamma[i] * w_list for (i, w_list) in enumerate(gradFC)]
 
-            self.convAccGradients = [
-                (1 - self.convGamma[i]) * 2 * self.convGamma[i] * torch.randn(w_list.size()).to(self.device) +
-                self.convGamma[i] * w_list for (i, w_list) in enumerate(gradConv)]
+            self.convAccGradients = [self.convGamma[i] * w_list for (i, w_list) in enumerate(gradConv)]
 
         else:
             self.fcAccGradients = [torch.add((1 - self.fcGamma[i]) * m, self.fcGamma[i] * g) for i, (m, g) in enumerate(zip(self.fcAccGradients, gradFC))]

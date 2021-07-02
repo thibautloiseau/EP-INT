@@ -124,17 +124,17 @@ class Data_Loader(DataLoader):
                 trainTransforms = [transforms.RandomHorizontalFlip(0.5),
                                    transforms.RandomCrop(size=[32, 32], padding=4, padding_mode='edge'),
                                    transforms.ToTensor(),
-                                   transforms.Normalize((0.4914, 0.4822, 0.4465), (0.247, 0.243, 0.261))]
+                                   transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010))]
 
                 testTransforms = [transforms.ToTensor(),
-                                  transforms.Normalize((0.4914, 0.4822, 0.4465), (0.247, 0.243, 0.261))]
+                                  transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010))]
 
                 return(
                     DataLoader(
                         datasets.CIFAR10(
                             root='./data', train=True, download=True,
                             transform=transforms.Compose(trainTransforms),
-                            target_transform=ReshapeTransformTargetConv(10)),
+                            target_transform=ReshapeTransformTargetConv(10, self.expandOutput)),
                         batch_size=self.trainBatchSize, shuffle=True, num_workers=10, pin_memory=True
                     ),
 
@@ -142,7 +142,7 @@ class Data_Loader(DataLoader):
                         datasets.CIFAR10(
                             root='./data', train=False, download=True,
                             transform=transforms.Compose(testTransforms),
-                            target_transform=ReshapeTransformTargetConv(10)),
+                            target_transform=ReshapeTransformTargetConv(10, self.expandOutput)),
                         batch_size=self.testBatchSize, shuffle=True, num_workers=10, pin_memory=True
                     )
                 )

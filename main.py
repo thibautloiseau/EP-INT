@@ -21,7 +21,7 @@ parser = argparse.ArgumentParser(description='Binary Equilibrium Propagation')
 parser.add_argument(
     '--dataset',
     type=str,
-    default='MNIST',
+    default='CIFAR10',
     help='Dataset to train the network (default: MNIST, others: FashionMNIST)')
 parser.add_argument(
     '--device',
@@ -31,18 +31,18 @@ parser.add_argument(
 parser.add_argument(
     '--archi',
     type=str,
-    default='fc',
+    default='conv',
     help='Architecture of the network (default: fc, others: conv)')
 parser.add_argument(
     '--layersList',
     nargs='+',
     type=int,
-    default=[784, 8192, 100],
+    default=[1024, 700],
     help='List of layer sizes (default: 1 fc hidden layers (4096))')
 parser.add_argument(
     '--expandOutput',
     type=int,
-    default=10,
+    default=70,
     help='Quantity by how much we expand the output layer)')
 parser.add_argument(
     '--trainBatchSize',
@@ -57,24 +57,24 @@ parser.add_argument(
 parser.add_argument(
     '--T',
     type=int,
-    default=16,
+    default=32,
     metavar='T',
     help='Number of time steps in the free phase (default: 50)')
 parser.add_argument(
     '--Kmax',
     type=int,
-    default=16,
+    default=32,
     metavar='Kmax',
     help='Number of time steps in the backward pass (default: 10)')
 parser.add_argument(
     '--beta',
     type=float,
-    default=2,
+    default=1,
     help='Nudging parameter (default: 2)')
 parser.add_argument(
     '--randomBeta',
     type=int,
-    default=0,
+    default=1,
     help='Use random sign of beta for training or fixed >0 sign (default: 1, other: 0)')
 parser.add_argument(
     '--tauInt',
@@ -113,7 +113,7 @@ parser.add_argument(
 parser.add_argument(
     '--decay',
     type=int,
-    default=2,
+    default=1,
     help='Quantity by which we multiply the threshold for BOP after a certain number of epochs')
 parser.add_argument(
     '--constNudge',
@@ -129,7 +129,7 @@ parser.add_argument(
     '--lrBias',
     nargs='+',
     type=float,
-    default=[2e-6, 5e-6, 1e-5],
+    default=[2e-6, 5e-6, 5e-6, 1e-5],
     help='Learning rates for biases')
 
 # Parameters for conv architecture
@@ -137,7 +137,7 @@ parser.add_argument(
     '--convList',
     nargs='+',
     type=int,
-    default=[1, 256, 512],
+    default=[3, 256, 512],
     help="List of convolutional layers with number of channels (default: )")
 parser.add_argument(
     '--kernel',
@@ -164,13 +164,13 @@ parser.add_argument(
     '--fcTau',
     nargs='+',
     type=float,
-    default=[8e-8],
+    default=[8e-8, 8e-8],
     help='Thresholds used for the fc of the conv arch')
 parser.add_argument(
     '--fcGamma',
     nargs='+',
     type=float,
-    default=[5e-8],
+    default=[5e-8, 5e-8],
     help='Gamma for FC part for BOP')
 parser.add_argument(
     '--convGamma',
