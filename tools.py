@@ -65,8 +65,6 @@ def trainFC(net, trainLoader, epoch, args):
         singlePred = torch.stack([item[:, 0] for item in freeState[0].split(args.expandOutput, dim=1)], 1)
         singleFalsePred += (torch.argmax(targetsRed, dim=1) != torch.argmax(singlePred, dim=1)).int().sum(dim=0)
 
-    print(net.accGradientsInt)
-
     # We compute the error for the whole epoch
     aveTrainError = aveFalsePred.float() / float(len(trainLoader.dataset)) * 100
     singleTrainError = singleFalsePred.float() / float(len(trainLoader.dataset)) * 100

@@ -135,7 +135,7 @@ class Data_Loader(DataLoader):
                             root='./data', train=True, download=True,
                             transform=transforms.Compose(trainTransforms),
                             target_transform=ReshapeTransformTargetConv(10, self.expandOutput)),
-                        batch_size=self.trainBatchSize, shuffle=True, num_workers=10, pin_memory=True
+                        batch_size=self.trainBatchSize, shuffle=True, num_workers=1, pin_memory=True
                     ),
 
                     DataLoader(
@@ -143,7 +143,7 @@ class Data_Loader(DataLoader):
                             root='./data', train=False, download=True,
                             transform=transforms.Compose(testTransforms),
                             target_transform=ReshapeTransformTargetConv(10, self.expandOutput)),
-                        batch_size=self.testBatchSize, shuffle=True, num_workers=10, pin_memory=True
+                        batch_size=self.testBatchSize, shuffle=True, num_workers=1, pin_memory=True
                     )
                 )
 

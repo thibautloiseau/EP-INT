@@ -37,12 +37,12 @@ parser.add_argument(
     '--layersList',
     nargs='+',
     type=int,
-    default=[1024, 700],
+    default=[1600],
     help='List of layer sizes (default: 1 fc hidden layers (4096))')
 parser.add_argument(
     '--expandOutput',
     type=int,
-    default=70,
+    default=160,
     help='Quantity by how much we expand the output layer)')
 parser.add_argument(
     '--trainBatchSize',
@@ -57,19 +57,19 @@ parser.add_argument(
 parser.add_argument(
     '--T',
     type=int,
-    default=32,
+    default=150,
     metavar='T',
     help='Number of time steps in the free phase (default: 50)')
 parser.add_argument(
     '--Kmax',
     type=int,
-    default=32,
+    default=60,
     metavar='Kmax',
     help='Number of time steps in the backward pass (default: 10)')
 parser.add_argument(
     '--beta',
     type=float,
-    default=1,
+    default=0.01,
     help='Nudging parameter (default: 2)')
 parser.add_argument(
     '--randomBeta',
@@ -80,13 +80,13 @@ parser.add_argument(
     '--tauInt',
     nargs='+',
     type=int,
-    default=[0, 0],
+    default=[1, 1],
     help='Thresholds used for BOP')
 parser.add_argument(
     '--bitsMom',
     nargs='+',
     type=int,
-    default=6,
+    default=7,
     help='Number of bits for the momentum')
 # Training settings
 parser.add_argument(
@@ -108,7 +108,7 @@ parser.add_argument(
 parser.add_argument(
     '--bitsBias',
     type=int,
-    default=4,
+    default=5,
     help='Number of bits for biases in signed int coding')
 parser.add_argument(
     '--decay',
@@ -124,12 +124,12 @@ parser.add_argument(
     '--stochInput',
     type=int,
     default=1,
-    help='Get stochastic binarized inputs')
+    help='Get stochastic binary inputs')
 parser.add_argument(
     '--lrBias',
     nargs='+',
     type=float,
-    default=[2e-6, 5e-6, 5e-6, 1e-5],
+    default=[0, 0, 0],
     help='Learning rates for biases')
 
 # Parameters for conv architecture
@@ -137,52 +137,51 @@ parser.add_argument(
     '--convList',
     nargs='+',
     type=int,
-    default=[3, 256, 512],
+    default=[3, 512, 1024],
     help="List of convolutional layers with number of channels (default: )")
 parser.add_argument(
     '--kernel',
     type=int,
     default=5,
-    help="Kernel size for convolution")
+    help="Kernel size for convolution (default: 5)")
 parser.add_argument(
     '--FPool',
     type=int,
     default=3,
-    help="Pooling filter size")
+    help="Pooling filter size (default: 3)")
 parser.add_argument(
     '--padding',
     type=int,
-    default=1,
+    default=0,
     help="Padding (default: 0)")
 parser.add_argument(
     '--convTau',
     nargs='+',
     type=float,
-    default=[8e-8, 2e-7],
+    default=[1e-8, 1e-8],
     help='Thresholds used for the conv part of the conv arch')
+parser.add_argument(
+    '--convGamma',
+    nargs='+',
+    type=float,
+    default=[1e-8, 1e-8],
+    help='Gamma for conv part for BOP')
 parser.add_argument(
     '--fcTau',
     nargs='+',
     type=float,
-    default=[8e-8, 8e-8],
+    default=[1e-8],
     help='Thresholds used for the fc of the conv arch')
 parser.add_argument(
     '--fcGamma',
     nargs='+',
     type=float,
-    default=[5e-8, 5e-8],
+    default=[1e-8],
     help='Gamma for FC part for BOP')
-parser.add_argument(
-    '--convGamma',
-    nargs='+',
-    type=float,
-    default=[5e-8, 5e-8],
-    help='Gamma for conv part for BOP')
 
 args = parser.parse_args()
 
 if __name__ == '__main__':
-
     # We reverse the layersList according to the convention that the output is 0 indexed
     args.layersList.reverse()
     args.convList.reverse()

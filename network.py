@@ -175,19 +175,19 @@ class FCbinWAInt(nn.Module):
                 gradWInt.append(
                                 (torch.mm(torch.transpose(nudgedBinState[layer], 0, 1), nudgedBinState[layer + 1]) -
                                  torch.mm(torch.transpose(freeBinState[layer], 0, 1), freeBinState[layer + 1])).clamp(-8, 7)  # 4 bits for weight gradients
-                                )
+                                    )
 
                 if self.hasBias:
                     gradBias.append((nudgedBinState[layer] - freeBinState[layer]).sum(0).clamp(-8, 7))  # 4 bits for bias gradients
 
             # We initialize the accumulated gradients for first iteration or BOP
             if self.accGradientsInt == []:
-                self.accGradientsInt = [(0.5 * gradWInt[i]).int() for i in range(len(gradWInt))]
-                # self.accGradientsInt = gradWInt
+                # self.accGradientsInt = [(0.5 * gradWInt[i]).int() for i in range(len(gradWInt))]
+                self.accGradientsInt = [(torch.rand(size=gradWInt[i].shape).to(self.device) < torch.abs(gradWInt[i]) / 8).int() * gradWInt[i] for i in range(len(gradWInt))]
 
             else:
-                self.accGradientsInt = [((0.5 * g).int() + m.int()).clamp(-self.maxMom + 1, self.maxMom) for i, (g, m) in enumerate(zip(gradWInt, self.accGradientsInt))]
-                # self.accGradientsInt = [(g.int() + m.int()).clamp(-self.maxMom + 1, self.maxMom) for i, (g, m) in enumerate(zip(gradWInt, self.accGradientsInt))]
+                # self.accGradientsInt = [((0.5 * g).int() + m.int()).clamp(-self.maxMom + 1, self.maxMom) for i, (g, m) in enumerate(zip(gradWInt, self.accGradientsInt))]
+                self.accGradientsInt = [((torch.rand(size=g[i].shape).to(self.device) < torch.abs(g[i]) / 8).int() * g.int() + m.int()).clamp(-self.maxMom + 1, self.maxMom) for i, (g, m) in enumerate(zip(gradWInt, self.accGradientsInt))]
 
             gradWInt = self.accGradientsInt
 
@@ -203,7 +203,7 @@ class FCbinWAInt(nn.Module):
             for layer in range(len(freeState) - 1):
                 # Weights updates
                 tauTensorInt = self.tauInt[layer] * torch.ones(self.W[layer].weight.shape).to(self.device)
-                modifyWeightsInt = -1 * torch.sign((-1 * torch.sign(self.W[layer].weight) * gradWInt[layer] > tauTensorInt).int() - 0.5)
+                modifyWeightsInt = -1 * torch.sign((-1 * torch.sign(self.W[layer].weight) * gradWInt[layer] >= tauTensorInt).int() - 0.5)
                 noChanges.append(torch.sum(abs(modifyWeightsInt - 1)).item() / 2)
 
                 self.W[layer].weight.data = torch.mul(self.W[layer].weight.data, modifyWeightsInt)
@@ -215,7 +215,7 @@ class FCbinWAInt(nn.Module):
         return noChanges
 
 # ======================================================================================================================
-# ==================================== Conv architecture - Binary weights and synapses ==============================
+# ==================================== Conv architecture - Binary weights and synapses =================================
 # ======================================================================================================================
 
 class ConvWAInt(nn.Module):
