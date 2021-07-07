@@ -545,9 +545,10 @@ def main15():
 # Testing for accumulated gradients
 
 def main16():
-    a = torch.randn(size=(10, 10))
-    print(a)
-    print(a[torch.where(torch.abs(a) > 1)])
+    # a = torch.randn(size=(10, 10))
+    # print(a)
+    # print(a[torch.where(torch.abs(a) > 1)])
+    print(4*784)
 
     return
 

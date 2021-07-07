@@ -57,7 +57,7 @@ parser.add_argument(
 parser.add_argument(
     '--T',
     type=int,
-    default=150,
+    default=60,
     metavar='T',
     help='Number of time steps in the free phase (default: 50)')
 parser.add_argument(
@@ -103,7 +103,7 @@ parser.add_argument(
 parser.add_argument(
     '--bitsState',
     type=int,
-    default=10,
+    default=9,
     help='Number of bits for states in signed int coding')
 parser.add_argument(
     '--bitsBias',
@@ -113,7 +113,7 @@ parser.add_argument(
 parser.add_argument(
     '--decay',
     type=int,
-    default=1,
+    default=2,
     help='Quantity by which we multiply the threshold for BOP after a certain number of epochs')
 parser.add_argument(
     '--constNudge',

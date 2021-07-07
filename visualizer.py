@@ -52,17 +52,17 @@ class Visualizer(SummaryWriter):
 
     def addTraining(self, aveTrainError, singleTrainError, trainLoss, epoch):
         """Adding training loss curve on tensorboard"""
-        self.add_scalar("Average training error", aveTrainError, epoch)
-        self.add_scalar("Single training error", singleTrainError, epoch)
-        self.add_scalar("Training loss", trainLoss, epoch)
+        self.add_scalar("training/Average training error", aveTrainError, epoch)
+        self.add_scalar("training/Single training error", singleTrainError, epoch)
+        self.add_scalar("training/Training loss", trainLoss, epoch)
 
         return 0
 
     def addTesting(self, aveTestError, singleTestError, testLoss, epoch):
         """Adding testing loss curve on tensorboard"""
-        self.add_scalar("Average testing error", aveTestError, epoch)
-        self.add_scalar("Single testing error", singleTestError, epoch)
-        self.add_scalar("Testing loss", testLoss, epoch)
+        self.add_scalar("testing/Average testing error", aveTestError, epoch)
+        self.add_scalar("testing/Single testing error", singleTestError, epoch)
+        self.add_scalar("testing/Testing loss", testLoss, epoch)
 
         return 0
 
@@ -73,19 +73,19 @@ class Visualizer(SummaryWriter):
             for layer in range(len(self.args.layersList) - 1):
                 nbWeights = self.net.W[layer].weight.numel()
                 piLayerEpoch = np.log(nbChanges[layer] / nbWeights + np.exp(-9))
-                self.add_scalar("Weight flips for layer " + str(layer), piLayerEpoch, epoch)
+                self.add_scalar("flips/Weight flips for layer " + str(layer), piLayerEpoch, epoch)
 
         elif self.args.archi == 'conv':
 
             for layer in range(len(self.args.layersList)):
                 nbWeights = self.net.fc[layer].weight.numel()
                 piLayerEpoch = np.log(nbChanges[layer] / nbWeights + np.exp(-9))
-                self.add_scalar("Weight flips for FC layer " + str(layer), piLayerEpoch, epoch)
+                self.add_scalar("flips/Weight flips for FC layer " + str(layer), piLayerEpoch, epoch)
 
             for layer in range(len(self.args.convList) - 1):
                 nbWeights = self.net.conv[layer].weight.numel()
                 piLayerEpoch = np.log(nbChangesConv[layer] / nbWeights + np.exp(-9))
-                self.add_scalar("Weight flips for conv layer " + str(layer), piLayerEpoch, epoch)
+                self.add_scalar("flips/Weight flips for conv layer " + str(layer), piLayerEpoch, epoch)
 
         return 0
 

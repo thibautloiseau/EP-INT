@@ -8,6 +8,7 @@ import torch.nn.functional as F
 # ==================================== FC architecture - Binary weights and synapses ================================
 # ======================================================================================================================
 
+
 class FCbinWAInt(nn.Module):
     """Network for fully connected architecture with binary weights and activations"""
 
@@ -55,6 +56,7 @@ class FCbinWAInt(nn.Module):
 
         # Initialize the network according to the layersList given with XNOR-net method
         self.W = nn.ModuleList(None)
+        self.alphaTab = []
 
         with torch.no_grad():
             for i in range(len(self.layersList) - 1):
@@ -66,7 +68,9 @@ class FCbinWAInt(nn.Module):
                     self.W.extend([nn.Linear(self.layersList[i+1], self.layersList[i], bias=False)])
 
                 alphaInt = int(1 / (2 * np.sqrt(self.layersList[i+1])) * self.maxIntState)
-                self.W[-1].weight.data = alphaInt * torch.sign(self.W[-1].weight)
+                print(alphaInt)
+                self.alphaTab.append(alphaInt)
+                self.W[-1].weight.data = torch.sign(self.W[-1].weight)
 
     def initHidden(self, data):
         """Initialize the neurons"""
@@ -74,7 +78,6 @@ class FCbinWAInt(nn.Module):
         size = data.shape[0]
 
         for layer in range(len(self.layersList)):
-            # state.append(self.maxIntState / 2 * torch.ones(size, self.layersList[layer], requires_grad=False))
             state.append(torch.zeros(size, self.layersList[layer], requires_grad=False))
 
         if self.stochInput:
@@ -137,7 +140,7 @@ class FCbinWAInt(nn.Module):
 
         for layer in range(1, len(state) - 1):
             # Previous layer contribution
-            preAct[layer] = binStateP[layer] * self.W[layer](binState[layer + 1])
+            preAct[layer] = binStateP[layer] * 4 * self.W[layer](binState[layer + 1])
             # Next layer contribution
             preAct[layer] += binStateP[layer] * torch.mm(binState[layer - 1], self.W[layer - 1].weight)
             # Updating, filtering, and clamping the pre-activations
@@ -175,19 +178,19 @@ class FCbinWAInt(nn.Module):
                 gradWInt.append(
                                 (torch.mm(torch.transpose(nudgedBinState[layer], 0, 1), nudgedBinState[layer + 1]) -
                                  torch.mm(torch.transpose(freeBinState[layer], 0, 1), freeBinState[layer + 1])).clamp(-8, 7)  # 4 bits for weight gradients
-                                    )
+                )
 
                 if self.hasBias:
                     gradBias.append((nudgedBinState[layer] - freeBinState[layer]).sum(0).clamp(-8, 7))  # 4 bits for bias gradients
 
             # We initialize the accumulated gradients for first iteration or BOP
             if self.accGradientsInt == []:
-                # self.accGradientsInt = [(0.5 * gradWInt[i]).int() for i in range(len(gradWInt))]
-                self.accGradientsInt = [(torch.rand(size=gradWInt[i].shape).to(self.device) < torch.abs(gradWInt[i]) / 8).int() * gradWInt[i] for i in range(len(gradWInt))]
+                self.accGradientsInt = [g.int() for g in gradWInt]
+                # self.accGradientsInt = [(8 * torch.rand(size=gradWInt[i].shape).to(self.device) < torch.abs(gradWInt[i])).int() * gradWInt[i] for i in range(len(gradWInt))]
 
             else:
-                # self.accGradientsInt = [((0.5 * g).int() + m.int()).clamp(-self.maxMom + 1, self.maxMom) for i, (g, m) in enumerate(zip(gradWInt, self.accGradientsInt))]
-                self.accGradientsInt = [((torch.rand(size=g[i].shape).to(self.device) < torch.abs(g[i]) / 8).int() * g.int() + m.int()).clamp(-self.maxMom + 1, self.maxMom) for i, (g, m) in enumerate(zip(gradWInt, self.accGradientsInt))]
+                self.accGradientsInt = [(g.int() + m.int()).clamp(-self.maxMom - 1, self.maxMom) for i, (g, m) in enumerate(zip(gradWInt, self.accGradientsInt))]
+                # self.accGradientsInt = [((8 * torch.rand(size=g[i].shape).to(self.device) < torch.abs(g[i])).int() * g.int() + m.int()).clamp(-self.maxMom - 1, self.maxMom) for i, (g, m) in enumerate(zip(gradWInt, self.accGradientsInt))]
 
             gradWInt = self.accGradientsInt
 
@@ -217,6 +220,7 @@ class FCbinWAInt(nn.Module):
 # ======================================================================================================================
 # ==================================== Conv architecture - Binary weights and synapses =================================
 # ======================================================================================================================
+
 
 class ConvWAInt(nn.Module):
     def __init__(self, args):

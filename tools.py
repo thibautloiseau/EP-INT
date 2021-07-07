@@ -4,6 +4,7 @@ import torch
 import torch.nn as nn
 import numpy as np
 import json
+import matplotlib.pyplot as plt
 
 # ======================================================================================================================
 # ================================================ Training FC architecture ============================================
@@ -64,6 +65,11 @@ def trainFC(net, trainLoader, epoch, args):
         # compute error computed on the first neuron of each sub class
         singlePred = torch.stack([item[:, 0] for item in freeState[0].split(args.expandOutput, dim=1)], 1)
         singleFalsePred += (torch.argmax(targetsRed, dim=1) != torch.argmax(singlePred, dim=1)).int().sum(dim=0)
+
+    # for i in range(len(net.W)):
+    # #     plt.plot(net.accGradientsInt[i].cpu())
+    #     plt.plot(net.W[i].bias.cpu().detach().numpy())
+    #     plt.show()
 
     # We compute the error for the whole epoch
     aveTrainError = aveFalsePred.float() / float(len(trainLoader.dataset)) * 100
