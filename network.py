@@ -53,10 +53,12 @@ class FCbinWAInt(nn.Module):
         # Initialize the accumulated gradients for the batch, clamping
         self.accGradientsInt = []
         self.maxMom = 2**(args.bitsMom - 1) - 1
+        self.stochAcc = args.stochAcc
 
         # Initialize the network according to the layersList given with XNOR-net method
         self.W = nn.ModuleList(None)
         self.alphaTab = []
+        self.dropout = torch.nn.Dropout(p=0.5)
 
         with torch.no_grad():
             for i in range(len(self.layersList) - 1):
@@ -68,9 +70,9 @@ class FCbinWAInt(nn.Module):
                     self.W.extend([nn.Linear(self.layersList[i+1], self.layersList[i], bias=False)])
 
                 alphaInt = int(1 / (2 * np.sqrt(self.layersList[i+1])) * self.maxIntState)
-                print(alphaInt)
                 self.alphaTab.append(alphaInt)
-                self.W[-1].weight.data = torch.sign(self.W[-1].weight)
+                self.W[-1].weight.data = torch.sign(self.W[-1].weight)  # When reducing states nb bits
+                # self.W[-1].weight.data = alphaInt * torch.sign(self.W[-1].weight)  # When reducing states nb bits
 
     def initHidden(self, data):
         """Initialize the neurons"""
@@ -140,7 +142,8 @@ class FCbinWAInt(nn.Module):
 
         for layer in range(1, len(state) - 1):
             # Previous layer contribution
-            preAct[layer] = binStateP[layer] * 4 * self.W[layer](binState[layer + 1])
+            # preAct[layer] = binStateP[layer] * self.W[layer](binState[layer + 1])
+            preAct[layer] = binStateP[layer] * 4 * self.W[layer](binState[layer + 1])  # When reducing states nb bits
             # Next layer contribution
             preAct[layer] += binStateP[layer] * torch.mm(binState[layer - 1], self.W[layer - 1].weight)
             # Updating, filtering, and clamping the pre-activations
@@ -185,12 +188,20 @@ class FCbinWAInt(nn.Module):
 
             # We initialize the accumulated gradients for first iteration or BOP
             if self.accGradientsInt == []:
-                self.accGradientsInt = [g.int() for g in gradWInt]
-                # self.accGradientsInt = [(8 * torch.rand(size=gradWInt[i].shape).to(self.device) < torch.abs(gradWInt[i])).int() * gradWInt[i] for i in range(len(gradWInt))]
+                if self.stochAcc:
+                    self.accGradientsInt = [(torch.rand(size=gradWInt[i].shape).to(self.device) < torch.abs(gradWInt[i]) / 8).int() * 8
+                                            for i in range(len(gradWInt))]
+
+                else:
+                    self.accGradientsInt = [g.int() for g in gradWInt]
 
             else:
-                self.accGradientsInt = [(g.int() + m.int()).clamp(-self.maxMom - 1, self.maxMom) for i, (g, m) in enumerate(zip(gradWInt, self.accGradientsInt))]
-                # self.accGradientsInt = [((8 * torch.rand(size=g[i].shape).to(self.device) < torch.abs(g[i])).int() * g.int() + m.int()).clamp(-self.maxMom - 1, self.maxMom) for i, (g, m) in enumerate(zip(gradWInt, self.accGradientsInt))]
+                if self.stochAcc:
+                    self.accGradientsInt = [((torch.rand(size=g[i].shape).to(self.device) < torch.abs(g[i]) / 8).int() * 8
+                                             + m.int()).clamp(-self.maxMom - 1, self.maxMom) for i, (g, m) in enumerate(zip(gradWInt, self.accGradientsInt))]
+
+                else:
+                    self.accGradientsInt = [(g.int() + m.int()).clamp(-self.maxMom - 1, self.maxMom) for i, (g, m) in enumerate(zip(gradWInt, self.accGradientsInt))]
 
             gradWInt = self.accGradientsInt
 
@@ -223,6 +234,7 @@ class FCbinWAInt(nn.Module):
 
 
 class ConvWAInt(nn.Module):
+    """Full precision variables"""
     def __init__(self, args):
         super(ConvWAInt, self).__init__()
 

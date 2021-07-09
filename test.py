@@ -552,4 +552,17 @@ def main16():
 
     return
 
-main16()
+# main16()
+
+########################################################################################################################
+# See weights
+
+def main17():
+    model = torch.load("SAVE-fc-MNIST/2021-07-09/S1/checkpoint.pt")
+    print(model['modelStateDict']['W.1.weight'])
+    dropout = torch.nn.Dropout(p=0.5)
+    print(dropout(model['modelStateDict']['W.0.weight']))
+
+    return
+
+main17()

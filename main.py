@@ -103,7 +103,7 @@ parser.add_argument(
 parser.add_argument(
     '--bitsState',
     type=int,
-    default=9,
+    default=10,
     help='Number of bits for states in signed int coding')
 parser.add_argument(
     '--bitsBias',
@@ -131,6 +131,12 @@ parser.add_argument(
     type=float,
     default=[0, 0, 0],
     help='Learning rates for biases')
+parser.add_argument(
+    '--stochAcc',
+    type=int,
+    default=0,
+    help='Accumulate the gradients in a stochastic way')
+
 
 # Parameters for conv architecture
 parser.add_argument(
