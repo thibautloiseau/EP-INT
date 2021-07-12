@@ -36,6 +36,7 @@ class FCbinWAInt(nn.Module):
 
         self.hasBias = args.hasBias
         self.maxIntBias = 2**(args.bitsBias - 1) - 1
+        self.lrBiasInt = args.lrBiasInt
 
         self.stochInput = args.stochInput
 
@@ -180,16 +181,16 @@ class FCbinWAInt(nn.Module):
             for layer in range(len(freeState) - 1):
                 gradWInt.append(
                                 (torch.mm(torch.transpose(nudgedBinState[layer], 0, 1), nudgedBinState[layer + 1]) -
-                                 torch.mm(torch.transpose(freeBinState[layer], 0, 1), freeBinState[layer + 1])).clamp(-8, 7)  # 4 bits for weight gradients
+                                 torch.mm(torch.transpose(freeBinState[layer], 0, 1), freeBinState[layer + 1])).clamp(-7, 7)  # 4 bits for weight gradients
                 )
 
                 if self.hasBias:
-                    gradBias.append((nudgedBinState[layer] - freeBinState[layer]).sum(0).clamp(-8, 7))  # 4 bits for bias gradients
+                    gradBias.append((nudgedBinState[layer] - freeBinState[layer]).sum(0).clamp(-7, 7))  # 4 bits for bias gradients
 
             # We initialize the accumulated gradients for first iteration or BOP
             if self.accGradientsInt == []:
                 if self.stochAcc:
-                    self.accGradientsInt = [(torch.rand(size=gradWInt[i].shape).to(self.device) < torch.abs(gradWInt[i]) / 8).int() * 8
+                    self.accGradientsInt = [(torch.rand(size=gradWInt[i].shape).to(self.device) < torch.abs(gradWInt[i]) / 7).int() * 7 * torch.sign(gradWInt[i])
                                             for i in range(len(gradWInt))]
 
                 else:
@@ -197,11 +198,11 @@ class FCbinWAInt(nn.Module):
 
             else:
                 if self.stochAcc:
-                    self.accGradientsInt = [((torch.rand(size=g[i].shape).to(self.device) < torch.abs(g[i]) / 8).int() * 8
-                                             + m.int()).clamp(-self.maxMom - 1, self.maxMom) for i, (g, m) in enumerate(zip(gradWInt, self.accGradientsInt))]
+                    self.accGradientsInt = [((torch.rand(size=g[i].shape).to(self.device) < torch.abs(g[i]) / 7).int() * 7 * torch.sign(g[i])
+                                             + m.int()).clamp(-self.maxMom, self.maxMom) for i, (g, m) in enumerate(zip(gradWInt, self.accGradientsInt))]
 
                 else:
-                    self.accGradientsInt = [(g.int() + m.int()).clamp(-self.maxMom - 1, self.maxMom) for i, (g, m) in enumerate(zip(gradWInt, self.accGradientsInt))]
+                    self.accGradientsInt = [(g.int() + m.int()).clamp(-self.maxMom, self.maxMom) for i, (g, m) in enumerate(zip(gradWInt, self.accGradientsInt))]
 
             gradWInt = self.accGradientsInt
 
@@ -224,7 +225,7 @@ class FCbinWAInt(nn.Module):
 
                 # Biases updates
                 if self.hasBias:
-                    self.W[layer].bias.data = (self.W[layer].bias + gradBias[layer]).clamp(-self.maxIntBias + 1, self.maxIntBias)
+                    self.W[layer].bias.data = (self.W[layer].bias + (1/self.lrBiasInt * gradBias[layer]).int()).clamp(-self.maxIntBias, self.maxIntBias)
 
         return noChanges
 

@@ -62,7 +62,7 @@ class Data_Loader(DataLoader):
                             transform=transforms.Compose(self.fcTransforms),
                             target_transform=ReshapeTransformTargetFC(10, self.expandOutput, self.maxIntState)
                         ),
-                        shuffle=True, batch_size=self.trainBatchSize, num_workers=10, pin_memory=True
+                        shuffle=True, batch_size=self.trainBatchSize, num_workers=1, pin_memory=True
                     ),
 
                     DataLoader(
@@ -71,7 +71,7 @@ class Data_Loader(DataLoader):
                             transform=transforms.Compose(self.fcTransforms),
                             target_transform=ReshapeTransformTargetFC(10, self.expandOutput, self.maxIntState)
                         ),
-                        shuffle=True, batch_size=self.testBatchSize, num_workers=10, pin_memory=True
+                        shuffle=True, batch_size=self.testBatchSize, num_workers=1, pin_memory=True
                     )
                 )
 

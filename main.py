@@ -84,7 +84,6 @@ parser.add_argument(
     help='Thresholds used for BOP')
 parser.add_argument(
     '--bitsMom',
-    nargs='+',
     type=int,
     default=7,
     help='Number of bits for the momentum')
@@ -125,6 +124,11 @@ parser.add_argument(
     type=int,
     default=1,
     help='Get stochastic binary inputs')
+parser.add_argument(
+    '--lrBiasInt',
+    type=int,
+    default=8,
+    help='Learning rates (division by a power of 2) for biases in integer states')
 parser.add_argument(
     '--lrBias',
     nargs='+',
