@@ -232,6 +232,10 @@ if __name__ == '__main__':
             aveTestError, singleTestError, testLoss = testFC(net, testLoader, args)
             visualizer.addTesting(aveTestError, singleTestError, testLoss, epoch)
 
+            # Adding gradients
+            visualizer.addGrad(epoch)
+            net.gradWInt = [0] * (len(net.layersList) - 1)
+
             print("Training loss: " + str(trainLoss))
             print("Average training error: " + str(aveTrainError))
             print("Single training error: " + str(singleTrainError))
@@ -284,6 +288,11 @@ if __name__ == '__main__':
             print("Testing")
             aveTestError, singleTestError, testLoss = testConv(net, testLoader, args)
             visualizer.addTesting(aveTestError, singleTestError, testLoss, epoch)
+
+            # Adding gradients
+            visualizer.addGrad(epoch)
+            net.fcGrad = [0] * len(net.layersList)
+            net.convGrad = [0] * (len(net.convList) - 1)
 
             print("Training loss: " + str(trainLoss))
             print("Average training error: " + str(aveTrainError))

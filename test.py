@@ -579,4 +579,15 @@ def main18():
 
     return
 
-main18()
+# main18()
+
+########################################################################################################################
+# mean weights
+
+def main19():
+    test = torch.randint(-10, 10, size=(100, 100, 100), dtype=float)
+    print(torch.mean(test))
+
+    return
+
+main19()

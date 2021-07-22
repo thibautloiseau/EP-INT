@@ -58,7 +58,7 @@ class FCbinWAInt(nn.Module):
         self.stochAcc = args.stochAcc
 
         # Creating attributes for batch gradients
-        # self.gradWInt, self.gradBias = [], []
+        self.gradWInt = [0] * (len(self.layersList) - 1)
 
         # Initialize the network according to the layersList given with XNOR-net method
         self.W = nn.ModuleList(None)
@@ -186,6 +186,9 @@ class FCbinWAInt(nn.Module):
                                  torch.mm(torch.transpose(freeBinState[layer], 0, 1), freeBinState[layer + 1])).clamp(-7, 7)  # 4 bits for weight gradients
                 )
 
+                # We add the mean gradients / layer to the gradients of the epoch
+                self.gradWInt[layer] += torch.mean(gradWInt[-1]).item()
+
                 if self.hasBias:
                     gradBias.append((nudgedBinState[layer] - freeBinState[layer]).sum(0).clamp(-7, 7))  # 4 bits for bias gradients
 
@@ -201,7 +204,7 @@ class FCbinWAInt(nn.Module):
             else:
                 if self.stochAcc:
                     self.accGradientsInt = [((torch.rand(size=g[i].shape).to(self.device) < torch.abs(g[i]) / 7).float() * 7.0 * torch.sign(g[i])
-                                             + m.int()).clamp(-self.maxMom, self.maxMom) for i, (g, m) in enumerate(zip(gradWInt, self.accGradientsInt))]
+                                             + m).clamp(-self.maxMom, self.maxMom) for i, (g, m) in enumerate(zip(gradWInt, self.accGradientsInt))]
 
                 else:
                     self.accGradientsInt = [(g.int() + m.int()).clamp(-self.maxMom, self.maxMom) for i, (g, m) in enumerate(zip(gradWInt, self.accGradientsInt))]
@@ -267,6 +270,8 @@ class ConvWAInt(nn.Module):
         self.convGamma = args.convGamma
         self.nbConv = len(self.convList) - 1
 
+        self.convGrad = [0] * (len(self.convList) - 1)
+
         # FC layers parameters
         self.fcList = args.layersList.copy()
         self.fc = nn.ModuleList(None)
@@ -274,6 +279,8 @@ class ConvWAInt(nn.Module):
         self.fcTau = args.fcTau
         self.fcGamma = args.fcGamma
         self.nbFC = len(self.fcList)
+
+        self.fcGrad = [0] * len(self.fcList)
 
         self.hasBias = args.hasBias
         self.lrBias = args.lrBias
@@ -454,12 +461,16 @@ class ConvWAInt(nn.Module):
             gradFC.append(coef * (torch.mm(torch.transpose(nudgedBinState[i].view(nudgedBinState[i].size(0), -1), 0, 1), nudgedBinState[i + 1].view(nudgedBinState[i].size(0), -1)) -
                                   torch.mm(torch.transpose(freeBinState[i].view(freeBinState[i].size(0), -1), 0, 1), freeBinState[i + 1].view(freeBinState[i].size(0), -1))))
 
+            self.fcGrad[i] += torch.mean(gradFC[-1]).item()
+
             if self.hasBias:
                 gradFCBias.append(coef * (nudgedBinState[i] - freeBinState[i]).sum(0))
 
         # Link between last conv and first FC layer
         gradFC.append(coef * (torch.mm(torch.transpose(nudgedBinState[self.nbFC - 1], 0, 1), nudgedBinState[self.nbFC].view(nudgedBinState[self.nbFC].size(0), -1)) -
                               torch.mm(torch.transpose(freeBinState[self.nbFC - 1], 0, 1), freeBinState[self.nbFC].view(freeBinState[self.nbFC].size(0), -1))))
+
+        self.fcGrad[-1] += torch.mean(gradFC[-1]).item()
 
         if self.hasBias:
             gradFCBias.append(coef * (nudgedBinState[self.nbFC - 1] - freeBinState[self.nbFC - 1]).sum(0))
@@ -478,6 +489,8 @@ class ConvWAInt(nn.Module):
                                  self.unpool(freeBinState[self.nbFC + i], freeIndices[self.nbFC + i], output_size=outputSize).permute(1, 0, 2, 3),
                                  padding=self.padding))
                             .permute(1, 0, 2, 3))
+
+            self.convGrad[i] += torch.mean(gradConv[-1]).item()
 
             if self.hasBias:
                 gradConvBias.append(coef * (
@@ -498,6 +511,8 @@ class ConvWAInt(nn.Module):
                             self.unpool(freeBinState[-1], freeIndices[-1], output_size=outputSize).permute(1, 0, 2, 3),
                             padding=self.padding))
                         .permute(1, 0, 2, 3))
+
+        self.convGrad[-1] += torch.mean(gradConv[-1]).item()
 
         if self.hasBias:
             gradConvBias.append(coef * (

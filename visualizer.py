@@ -91,6 +91,16 @@ class Visualizer(SummaryWriter):
 
     def addGrad(self, epoch):
         """Adding the gradients mean after each epoch"""
+        if self.args.archi == 'fc':
+            for layer in range(len(self.args.layersList) - 1):
+                self.add_scalar("gradients/Weight gradients for layer " + str(layer), self.net.gradWInt[layer], epoch)
+
+        if self.args.archi == 'conv':
+            for layer in range(len(self.args.layersList)):
+                self.add_scalar("gradients/Weight gradients for FC layer " + str(layer), self.net.fcGrad[layer], epoch)
+
+            for layer in range(len(self.args.convList) - 1):
+                self.add_scalar("gradients/Weight gradients for conv layer " + str(layer), self.net.convGrad[layer], epoch)
 
         return 0
 
