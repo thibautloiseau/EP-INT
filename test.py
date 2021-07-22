@@ -565,4 +565,18 @@ def main17():
 
     return
 
-main17()
+# main17()
+
+########################################################################################################################
+# Stochastic accumulation
+
+def main18():
+    rand = torch.rand(size=(10, 10))
+    inte = torch.randint(-7, 7, size=(10, 10))
+    test = ((rand < torch.abs(inte)/7).int() * 7.0) * torch.sign(inte)
+
+    print(test)
+
+    return
+
+main18()

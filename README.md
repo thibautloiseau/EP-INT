@@ -1,2 +1,2 @@
 # EP-INT
-Binarized Equilibrium Propagation with integer states
+Binary Equilibrium Propagation with integer variables

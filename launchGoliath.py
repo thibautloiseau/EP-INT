@@ -2,6 +2,7 @@ from main import args
 import threading
 import os
 import time
+import numpy as np
 
 # Defining all hyper-parameters on which to train the network
 betaL = [args.beta * 4**i for i in range(5)]
@@ -12,6 +13,8 @@ fcTauL = [[args.fcTau[i] * 8**j for i in range(len(args.fcTau))] for j in range(
 
 devices = [i for i in range(8)]  # 8 GPUs for Goliath
 cmds = []  # We init all the cmds we want to launch
+
+print(cmds)
 
 for beta in betaL:
     for i, convGamma in enumerate(convGammaL):
@@ -41,38 +44,38 @@ class Train(threading.Thread):
         return
 
 
-if __name__ == '__main__':
-    # We init the number of cmds that has been launched
-    cmds_launched = 0
-
-    # Launching the first threads
-    threads = [Train(cmds[i], devices[i]) for i in range(8)]  # 8 GPUs for Goliath
-
-    for thread in threads:
-        thread.start()
-        cmds_launched += 1
-
-    running_devices = [thread.device for thread in threads]
-    free_devices = []
-
-    # We enter the while statement until all cmds are launched
-    while cmds_launched != len(cmds):
-        # Checking which threads are running
-        for thread in threads:
-            if not thread.is_alive():
-                thread.handled = True
-
-        # We get the free devices, threads running and running devices
-        free_devices = [thread.device for thread in threads if thread.handled]
-
-        running_devices = [thread.device for thread in threads if not thread.handled]
-        threads = [thread for thread in threads if not thread.handled]
-
-        # We launch new threads for free devices
-        for device in free_devices:
-            threads.append(Train(cmds[cmds_launched], device))
-            threads[-1].start()
-            cmds_launched += 1
+# if __name__ == '__main__':
+#     # We init the number of cmds that has been launched
+#     cmds_launched = 0
+#
+#     # Launching the first threads
+#     threads = [Train(cmds[i], devices[i]) for i in range(8)]  # 8 GPUs for Goliath
+#
+#     for thread in threads:
+#         thread.start()
+#         cmds_launched += 1
+#
+#     running_devices = [thread.device for thread in threads]
+#     free_devices = []
+#
+#     # We enter the while statement until all cmds are launched
+#     while cmds_launched != len(cmds):
+#         # Checking which threads are running
+#         for thread in threads:
+#             if not thread.is_alive():
+#                 thread.handled = True
+#
+#         # We get the free devices, threads running and running devices
+#         free_devices = [thread.device for thread in threads if thread.handled]
+#
+#         running_devices = [thread.device for thread in threads if not thread.handled]
+#         threads = [thread for thread in threads if not thread.handled]
+#
+#         # We launch new threads for free devices
+#         for device in free_devices:
+#             threads.append(Train(cmds[cmds_launched], device))
+#             threads[-1].start()
+#             cmds_launched += 1
 
 
 

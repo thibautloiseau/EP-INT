@@ -67,8 +67,8 @@ def trainFC(net, trainLoader, epoch, args):
         singleFalsePred += (torch.argmax(targetsRed, dim=1) != torch.argmax(singlePred, dim=1)).int().sum(dim=0)
 
     # for i in range(len(net.W)):
-    # #     plt.plot(net.accGradientsInt[i].cpu())
-    #     plt.plot(net.W[i].bias.cpu().detach().numpy())
+    #     plt.plot(net.accGradientsInt[i].cpu())
+    #     # plt.plot(net.W[i].bias.cpu().detach().numpy())
     #     plt.show()
 
     # We compute the error for the whole epoch

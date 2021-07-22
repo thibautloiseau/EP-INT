@@ -125,6 +125,11 @@ parser.add_argument(
     default=1,
     help='Get stochastic binary inputs')
 parser.add_argument(
+    '--stochEx',
+    type=int,
+    default=8,
+    help='Number of stochastic binary examples to present to the network')
+parser.add_argument(
     '--lrBiasInt',
     type=int,
     default=8,

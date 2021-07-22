@@ -40,7 +40,7 @@ class Visualizer(SummaryWriter):
         with open(os.path.join(self.path, 'hyperparameters.json'), 'w') as file:
             json.dump(vars(self.args), file, indent=4)
 
-        # Copy code used for training
+        # Copy code used for training to see modifications
         code = [file for file in os.listdir(os.getcwd()) if '.py' in file]
 
         os.makedirs(os.path.join(self.path, 'code'))
@@ -88,4 +88,10 @@ class Visualizer(SummaryWriter):
                 self.add_scalar("flips/Weight flips for conv layer " + str(layer), piLayerEpoch, epoch)
 
         return 0
+
+    def addGrad(self, epoch):
+        """Adding the gradients mean after each epoch"""
+
+        return 0
+
 

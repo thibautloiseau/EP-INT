@@ -19,7 +19,7 @@ class FCbinWAInt(nn.Module):
         if torch.cuda.is_available():
             self.cuda = True
             self.device = args.device
-            self.deviceName = torch.cuda.get_device_name()
+            self.deviceName = torch.cuda.get_device_name(self.device)
 
         else:
             self.cuda = False
@@ -39,6 +39,7 @@ class FCbinWAInt(nn.Module):
         self.lrBiasInt = args.lrBiasInt
 
         self.stochInput = args.stochInput
+        self.stochEx = args.stochEx
 
         # Batch sizes
         self.trainBatchSize = args.trainBatchSize
@@ -56,10 +57,12 @@ class FCbinWAInt(nn.Module):
         self.maxMom = 2**(args.bitsMom - 1) - 1
         self.stochAcc = args.stochAcc
 
+        # Creating attributes for batch gradients
+        # self.gradWInt, self.gradBias = [], []
+
         # Initialize the network according to the layersList given with XNOR-net method
         self.W = nn.ModuleList(None)
         self.alphaTab = []
-        self.dropout = torch.nn.Dropout(p=0.5)
 
         with torch.no_grad():
             for i in range(len(self.layersList) - 1):
@@ -73,7 +76,6 @@ class FCbinWAInt(nn.Module):
                 alphaInt = int(1 / (2 * np.sqrt(self.layersList[i+1])) * self.maxIntState)
                 self.alphaTab.append(alphaInt)
                 self.W[-1].weight.data = torch.sign(self.W[-1].weight)  # When reducing states nb bits
-                # self.W[-1].weight.data = alphaInt * torch.sign(self.W[-1].weight)  # When reducing states nb bits
 
     def initHidden(self, data):
         """Initialize the neurons"""
@@ -86,7 +88,7 @@ class FCbinWAInt(nn.Module):
         if self.stochInput:
             stoch = torch.zeros(data.shape)
             # We initialize the input neurons with stochastic binary input data
-            for i in range(8):
+            for i in range(self.stochEx):
                 randV = torch.rand(size=data.shape)
                 stoch += (randV < data).float().clamp(0, 7)  # 3 bits for inputs when summing
 
@@ -190,7 +192,7 @@ class FCbinWAInt(nn.Module):
             # We initialize the accumulated gradients for first iteration or BOP
             if self.accGradientsInt == []:
                 if self.stochAcc:
-                    self.accGradientsInt = [(torch.rand(size=gradWInt[i].shape).to(self.device) < torch.abs(gradWInt[i]) / 7).int() * 7 * torch.sign(gradWInt[i])
+                    self.accGradientsInt = [(torch.rand(size=gradWInt[i].shape).to(self.device) < torch.abs(gradWInt[i]) / 7).float() * 7.0 * torch.sign(gradWInt[i])
                                             for i in range(len(gradWInt))]
 
                 else:
@@ -198,19 +200,17 @@ class FCbinWAInt(nn.Module):
 
             else:
                 if self.stochAcc:
-                    self.accGradientsInt = [((torch.rand(size=g[i].shape).to(self.device) < torch.abs(g[i]) / 7).int() * 7 * torch.sign(g[i])
+                    self.accGradientsInt = [((torch.rand(size=g[i].shape).to(self.device) < torch.abs(g[i]) / 7).float() * 7.0 * torch.sign(g[i])
                                              + m.int()).clamp(-self.maxMom, self.maxMom) for i, (g, m) in enumerate(zip(gradWInt, self.accGradientsInt))]
 
                 else:
                     self.accGradientsInt = [(g.int() + m.int()).clamp(-self.maxMom, self.maxMom) for i, (g, m) in enumerate(zip(gradWInt, self.accGradientsInt))]
 
-            gradWInt = self.accGradientsInt
-
-        return gradWInt, gradBias
+        return self.accGradientsInt, gradBias
 
     def updateWeights(self, freeState, nudgedState):
         """Updating parameters after having computed the gradient. We return the number of weight changes in the process"""
-        gradWInt, gradBias = self.computeGradients(freeState, nudgedState)
+        self.accGradientsInt, gradBias = self.computeGradients(freeState, nudgedState)
 
         noChanges = []
 
@@ -218,7 +218,7 @@ class FCbinWAInt(nn.Module):
             for layer in range(len(freeState) - 1):
                 # Weights updates
                 tauTensorInt = self.tauInt[layer] * torch.ones(self.W[layer].weight.shape).to(self.device)
-                modifyWeightsInt = -1 * torch.sign((-1 * torch.sign(self.W[layer].weight) * gradWInt[layer] >= tauTensorInt).int() - 0.5)
+                modifyWeightsInt = -1 * torch.sign((-1 * torch.sign(self.W[layer].weight) * self.accGradientsInt[layer] >= tauTensorInt).int() - 0.5)
                 noChanges.append(torch.sum(abs(modifyWeightsInt - 1)).item() / 2)
 
                 self.W[layer].weight.data = torch.mul(self.W[layer].weight.data, modifyWeightsInt)
