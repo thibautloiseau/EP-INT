@@ -291,7 +291,7 @@ if __name__ == '__main__':
 
             # Adding gradients
             visualizer.addGrad(epoch)
-            net.fcGrad = [0] * len(net.layersList)
+            net.fcGrad = [0] * len(net.fcList)
             net.convGrad = [0] * (len(net.convList) - 1)
 
             print("Training loss: " + str(trainLoss))

@@ -5,16 +5,14 @@ import time
 import numpy as np
 
 # Defining all hyper-parameters on which to train the network
-betaL = [args.beta * 4**i for i in range(5)]
-convGammaL = [[args.convGamma[i] * 8**j for i in range(len(args.convGamma))] for j in range(6)]
-convTauL = [[args.convTau[i] * 8**j for i in range(len(args.convTau))] for j in range(6)]
-fcGammaL = [[args.fcGamma[i] * 8**j for i in range(len(args.fcGamma))] for j in range(6)]
-fcTauL = [[args.fcTau[i] * 8**j for i in range(len(args.fcTau))] for j in range(6)]
+betaL = [1 + i for i in range(4)]
+convGammaL = [[1e-9 * 10**j for i in range(4)] for j in range(5)]
+convTauL = [[1e-9 * 10**j for i in range(4)] for j in range(5)]
+fcGammaL = [[1e-9 * 10**j for i in range(1)] for j in range(5)]
+fcTauL = [[1e-9 * 10**j for i in range(1)] for j in range(5)]
 
 devices = [i for i in range(8)]  # 8 GPUs for Goliath
 cmds = []  # We init all the cmds we want to launch
-
-print(cmds)
 
 for beta in betaL:
     for i, convGamma in enumerate(convGammaL):
@@ -25,10 +23,13 @@ for beta in betaL:
             args.fcGamma = fcGammaL[i]
             args.fcTau = fcTauL[j]
 
-            cmds.append(''.join(["python main.py --beta ", str(args.beta), " --convGamma ", str(args.convGamma),
+            cmds.append(''.join(["python main.py --dataset CIFAR10 --archi conv --layersList 100 --convList 3 64 128 256 256 "
+                                 "--expandOutput 10 --padding 2 --kernel 5 --FPool 2 --T 150 --Kmax 60 --randomBeta 1 "
+                                 "--lrBias 0 0 0 0 0 --trainBatchSize 64 --testBatchSize 512 --epochs 100 --beta ",
+                                 str(args.beta), " --convGamma ", str(args.convGamma),
                                  " --convTau ", str(args.convTau), " --fcGamma ", str(args.fcGamma), " --fcTau ",
-                                 str(args.fcTau)]).replace(',', '').replace('[', '').replace(']', ''))
-
+                                 str(args.fcTau)])
+                        .replace(',', '').replace('[', '').replace(']', ''))
 
 class Train(threading.Thread):
     """One run with the cmd specified"""

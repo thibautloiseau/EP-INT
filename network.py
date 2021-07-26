@@ -90,15 +90,15 @@ class FCbinWAInt(nn.Module):
             # We initialize the input neurons with stochastic binary input data
             for i in range(self.stochEx):
                 randV = torch.rand(size=data.shape)
-                stoch += (randV < data).float().clamp(0, 7)  # 3 bits for inputs when summing
+                stoch += (randV < data).float().clamp(0, self.stochEx)  # 3 bits for inputs when summing
 
-            stoch = (stoch >= 4).float()  # We binarize the sum of stochastic inputs with some kind of activation
+            stoch = (stoch > self.stochEx // 2).float()  # We binarize the sum of stochastic inputs with some kind of activation
 
             # We initialize the input with the last stochastic example for first try, as the dynamics depends on the input
             state[-1] = stoch
 
         else:
-            state[-1] = data.float()
+            state[-1] = (data >= 0.5).float()
 
         return state
 
@@ -145,8 +145,7 @@ class FCbinWAInt(nn.Module):
 
         for layer in range(1, len(state) - 1):
             # Previous layer contribution
-            # preAct[layer] = binStateP[layer] * self.W[layer](binState[layer + 1])
-            preAct[layer] = binStateP[layer] * 4 * self.W[layer](binState[layer + 1])  # When reducing states nb bits
+            preAct[layer] = binStateP[layer] * 2 * self.W[layer](binState[layer + 1])  # When reducing states nb bits
             # Next layer contribution
             preAct[layer] += binStateP[layer] * torch.mm(binState[layer - 1], self.W[layer - 1].weight)
             # Updating, filtering, and clamping the pre-activations
@@ -195,19 +194,18 @@ class FCbinWAInt(nn.Module):
             # We initialize the accumulated gradients for first iteration or BOP
             if self.accGradientsInt == []:
                 if self.stochAcc:
-                    self.accGradientsInt = [(torch.rand(size=gradWInt[i].shape).to(self.device) < torch.abs(gradWInt[i]) / 7).float() * 7.0 * torch.sign(gradWInt[i])
-                                            for i in range(len(gradWInt))]
+                    self.accGradientsInt = [(torch.rand(size=g.shape).to(self.device) < torch.abs(g) / 7).float() * torch.sign(g) for g in gradWInt]
 
                 else:
                     self.accGradientsInt = [g.int() for g in gradWInt]
 
             else:
                 if self.stochAcc:
-                    self.accGradientsInt = [((torch.rand(size=g[i].shape).to(self.device) < torch.abs(g[i]) / 7).float() * 7.0 * torch.sign(g[i])
-                                             + m).clamp(-self.maxMom, self.maxMom) for i, (g, m) in enumerate(zip(gradWInt, self.accGradientsInt))]
+                    self.accGradientsInt = [((torch.rand(size=g.shape).to(self.device) < torch.abs(g) / 7).float() * torch.sign(g)
+                                             + m).clamp(-self.maxMom, self.maxMom) for (g, m) in zip(gradWInt, self.accGradientsInt)]
 
                 else:
-                    self.accGradientsInt = [(g.int() + m.int()).clamp(-self.maxMom, self.maxMom) for i, (g, m) in enumerate(zip(gradWInt, self.accGradientsInt))]
+                    self.accGradientsInt = [(g.int() + m.int()).clamp(-self.maxMom, self.maxMom) for (g, m) in zip(gradWInt, self.accGradientsInt)]
 
         return self.accGradientsInt, gradBias
 

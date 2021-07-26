@@ -585,8 +585,11 @@ def main18():
 # mean weights
 
 def main19():
-    test = torch.randint(-10, 10, size=(100, 100, 100), dtype=float)
-    print(torch.mean(test))
+    # test = torch.randint(-10, 10, size=(100, 100, 100), dtype=float)
+    # print(torch.mean(test))
+
+    print(1/(2*np.sqrt(1024)) * 2**6)
+    print(1/(2*np.sqrt(784)) * 2**6)
 
     return
 
