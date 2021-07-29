@@ -23,9 +23,9 @@ for beta in betaL:
             args.fcGamma = fcGammaL[i]
             args.fcTau = fcTauL[j]
 
-            cmds.append(''.join(["python main.py --dataset CIFAR10 --archi conv --layersList 100 --convList 3 64 128 256 256 "
-                                 "--expandOutput 10 --padding 2 --kernel 5 --FPool 2 --T 150 --Kmax 60 --randomBeta 1 "
-                                 "--lrBias 0 0 0 0 0 --trainBatchSize 64 --testBatchSize 512 --epochs 100 --beta ",
+            cmds.append(''.join(["python main.py --dataset CIFAR10 --archi conv --layersList 800 --convList 3 128 256 512 512 "
+                                 "--expandOutput 80 --padding 1 --kernel 3 --FPool 2 --hasBias 0 --T 150 --Kmax 60 --randomBeta 1 "
+                                 "--trainBatchSize 64 --testBatchSize 512 --epochs 25 --beta ",
                                  str(args.beta), " --convGamma ", str(args.convGamma),
                                  " --convTau ", str(args.convTau), " --fcGamma ", str(args.fcGamma), " --fcTau ",
                                  str(args.fcTau)])
@@ -45,38 +45,38 @@ class Train(threading.Thread):
         return
 
 
-# if __name__ == '__main__':
-#     # We init the number of cmds that has been launched
-#     cmds_launched = 0
-#
-#     # Launching the first threads
-#     threads = [Train(cmds[i], devices[i]) for i in range(8)]  # 8 GPUs for Goliath
-#
-#     for thread in threads:
-#         thread.start()
-#         cmds_launched += 1
-#
-#     running_devices = [thread.device for thread in threads]
-#     free_devices = []
-#
-#     # We enter the while statement until all cmds are launched
-#     while cmds_launched != len(cmds):
-#         # Checking which threads are running
-#         for thread in threads:
-#             if not thread.is_alive():
-#                 thread.handled = True
-#
-#         # We get the free devices, threads running and running devices
-#         free_devices = [thread.device for thread in threads if thread.handled]
-#
-#         running_devices = [thread.device for thread in threads if not thread.handled]
-#         threads = [thread for thread in threads if not thread.handled]
-#
-#         # We launch new threads for free devices
-#         for device in free_devices:
-#             threads.append(Train(cmds[cmds_launched], device))
-#             threads[-1].start()
-#             cmds_launched += 1
+if __name__ == '__main__':
+    # We init the number of cmds that has been launched
+    cmds_launched = 0
+
+    # Launching the first threads
+    threads = [Train(cmds[i], devices[i]) for i in range(8)]  # 8 GPUs for Goliath
+
+    for thread in threads:
+        thread.start()
+        cmds_launched += 1
+
+    running_devices = [thread.device for thread in threads]
+    free_devices = []
+
+    # We enter the while statement until all cmds are launched
+    while cmds_launched != len(cmds):
+        # Checking which threads are running
+        for thread in threads:
+            if not thread.is_alive():
+                thread.handled = True
+
+        # We get the free devices, threads running and running devices
+        free_devices = [thread.device for thread in threads if thread.handled]
+
+        running_devices = [thread.device for thread in threads if not thread.handled]
+        threads = [thread for thread in threads if not thread.handled]
+
+        # We launch new threads for free devices
+        for device in free_devices:
+            threads.append(Train(cmds[cmds_launched], device))
+            threads[-1].start()
+            cmds_launched += 1
 
 
 

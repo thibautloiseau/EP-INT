@@ -113,11 +113,11 @@ def testFC(net, testLoader, args):
         singlePred = torch.stack([item[:, 0] for item in state[0].split(args.expandOutput, dim=1)], 1)
         singleFalsePred += (torch.argmax(targetsRed, dim=1) != torch.argmax(singlePred, dim=1)).int().sum(dim=0)
 
-        # We compute the error for the whole epoch
-        aveTestError = aveFalsePred.float() / float(len(testLoader.dataset)) * 100
-        singleTestError = singleFalsePred.float() / float(len(testLoader.dataset)) * 100
+    # We compute the error for the whole epoch
+    aveTestError = aveFalsePred.float() / float(len(testLoader.dataset)) * 100
+    singleTestError = singleFalsePred.float() / float(len(testLoader.dataset)) * 100
 
-        testLoss = testLoss / len(testLoader.dataset)
+    testLoss = testLoss / len(testLoader.dataset)
 
     return aveTestError.item(), singleTestError.item(), testLoss.item()
 

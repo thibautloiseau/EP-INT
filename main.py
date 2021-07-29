@@ -201,118 +201,119 @@ if __name__ == '__main__':
     args.layersList.reverse()
     args.convList.reverse()
 
-    # Initializing the data and the network
-    trainLoader, testLoader = Data_Loader(args)()
+    for i in range(5):
+        # Initializing the data and the network
+        trainLoader, testLoader = Data_Loader(args)()
 
-    if args.archi == 'fc':
-        net = FCbinWAInt(args)
+        if args.archi == 'fc':
+            net = FCbinWAInt(args)
 
-        # Create visualizer for tensorboard and save training
-        visualizer = Visualizer(net, args)
-        visualizer.saveHyperParameters()
+            # Create visualizer for tensorboard and save training
+            visualizer = Visualizer(net, args)
+            visualizer.saveHyperParameters()
 
-        if net.cuda:
-            net.to(net.device)
+            if net.cuda:
+                net.to(net.device)
 
-        print("Running on " + net.deviceName)
+            print("Running on " + net.deviceName)
 
-        # Training and testing the network
-        for epoch in tqdm(range(args.epochs)):
-            print("\nStarting epoch " + str(epoch + 1) + "/" + str(args.epochs))
+            # Training and testing the network
+            for epoch in tqdm(range(args.epochs)):
+                print("\nStarting epoch " + str(epoch + 1) + "/" + str(args.epochs))
 
-            # Training
-            print("Training")
-            nbChanges, aveTrainError, singleTrainError, trainLoss, _ = trainFC(net, trainLoader, epoch, args)
+                # Training
+                print("Training")
+                nbChanges, aveTrainError, singleTrainError, trainLoss, _ = trainFC(net, trainLoader, epoch, args)
 
-            visualizer.addTraining(aveTrainError, singleTrainError, trainLoss, epoch)
-            visualizer.addNbChanges(nbChanges, epoch)
+                visualizer.addTraining(aveTrainError, singleTrainError, trainLoss, epoch)
+                visualizer.addNbChanges(nbChanges, epoch)
 
-            # Testing
-            print("Testing")
-            aveTestError, singleTestError, testLoss = testFC(net, testLoader, args)
-            visualizer.addTesting(aveTestError, singleTestError, testLoss, epoch)
+                # Testing
+                print("Testing")
+                aveTestError, singleTestError, testLoss = testFC(net, testLoader, args)
+                visualizer.addTesting(aveTestError, singleTestError, testLoss, epoch)
 
-            # Adding gradients
-            visualizer.addGrad(epoch)
-            net.gradWInt = [0] * (len(net.layersList) - 1)
+                # Adding gradients
+                visualizer.addGrad(epoch)
+                net.gradWInt = [0] * (len(net.layersList) - 1)
 
-            print("Training loss: " + str(trainLoss))
-            print("Average training error: " + str(aveTrainError))
-            print("Single training error: " + str(singleTrainError))
+                print("Training loss: " + str(trainLoss))
+                print("Average training error: " + str(aveTrainError))
+                print("Single training error: " + str(singleTrainError))
 
-            print("Testing loss: " + str(testLoss))
-            print("Average testing error: " + str(aveTestError))
-            print("Single testing error: " + str(singleTestError))
+                print("Testing loss: " + str(testLoss))
+                print("Average testing error: " + str(aveTestError))
+                print("Single testing error: " + str(singleTestError))
 
-            # Save checkpoint after epoch
-            print("Saving checkpoint")
+                # Save checkpoint after epoch
+                print("Saving checkpoint")
 
-            torch.save({
-                'epoch': epoch,
-                'modelStateDict': net.state_dict(),
-                'trainLoss': trainLoss,
-                'aveTrainError': aveTrainError,
-                'testLoss': testLoss,
-                'aveTestError': aveTestError,
-            }, os.path.join(visualizer.path, 'checkpoint.pt'))
+                torch.save({
+                    'epoch': epoch,
+                    'modelStateDict': net.state_dict(),
+                    'trainLoss': trainLoss,
+                    'aveTrainError': aveTrainError,
+                    'testLoss': testLoss,
+                    'aveTestError': aveTestError,
+                }, os.path.join(visualizer.path, 'checkpoint.pt'))
 
-        print("Finished training")
+            print("Finished training")
+        
+        elif args.archi == 'conv':
+            net = ConvWAInt(args)
 
-    elif args.archi == 'conv':
-        net = ConvWAInt(args)
+            if net.cuda:
+                net.to(net.device)
 
-        if net.cuda:
-            net.to(net.device)
+            # Create visualizer for tensorboard and save training
+            visualizer = Visualizer(net, args)
+            visualizer.saveHyperParameters()
 
-        # Create visualizer for tensorboard and save training
-        visualizer = Visualizer(net, args)
-        visualizer.saveHyperParameters()
+            if net.cuda:
+                net.to(net.device)
 
-        if net.cuda:
-            net.to(net.device)
+            print("Running on " + net.deviceName)
 
-        print("Running on " + net.deviceName)
+            # Training and testing the network
+            for epoch in tqdm(range(args.epochs)):
+                print("\nStarting epoch " + str(epoch + 1) + "/" + str(args.epochs))
 
-        # Training and testing the network
-        for epoch in tqdm(range(args.epochs)):
-            print("\nStarting epoch " + str(epoch + 1) + "/" + str(args.epochs))
+                # Training
+                print("Training")
+                aveTrainError, singleTrainError, trainLoss, nbChangesFC, nbChangesConv = trainConv(net, trainLoader, epoch, args)
 
-            # Training
-            print("Training")
-            aveTrainError, singleTrainError, trainLoss, nbChangesFC, nbChangesConv = trainConv(net, trainLoader, epoch, args)
+                visualizer.addTraining(aveTrainError, singleTrainError, trainLoss, epoch)
+                visualizer.addNbChanges(nbChangesFC, epoch, nbChangesConv=nbChangesConv)
 
-            visualizer.addTraining(aveTrainError, singleTrainError, trainLoss, epoch)
-            visualizer.addNbChanges(nbChangesFC, epoch, nbChangesConv=nbChangesConv)
+                # Testing
+                print("Testing")
+                aveTestError, singleTestError, testLoss = testConv(net, testLoader, args)
+                visualizer.addTesting(aveTestError, singleTestError, testLoss, epoch)
 
-            # Testing
-            print("Testing")
-            aveTestError, singleTestError, testLoss = testConv(net, testLoader, args)
-            visualizer.addTesting(aveTestError, singleTestError, testLoss, epoch)
+                # Adding gradients
+                visualizer.addGrad(epoch)
+                net.fcGrad = [0] * len(net.fcList)
+                net.convGrad = [0] * (len(net.convList) - 1)
 
-            # Adding gradients
-            visualizer.addGrad(epoch)
-            net.fcGrad = [0] * len(net.fcList)
-            net.convGrad = [0] * (len(net.convList) - 1)
+                print("Training loss: " + str(trainLoss))
+                print("Average training error: " + str(aveTrainError))
+                print("Single training error: " + str(singleTrainError))
 
-            print("Training loss: " + str(trainLoss))
-            print("Average training error: " + str(aveTrainError))
-            print("Single training error: " + str(singleTrainError))
+                print("Testing loss: " + str(testLoss))
+                print("Average testing error: " + str(aveTestError))
+                print("Single testing error: " + str(singleTestError))
 
-            print("Testing loss: " + str(testLoss))
-            print("Average testing error: " + str(aveTestError))
-            print("Single testing error: " + str(singleTestError))
+                # Save checkpoint after epoch
+                print("Saving checkpoint")
 
-            # Save checkpoint after epoch
-            print("Saving checkpoint")
+                torch.save({
+                    'epoch': epoch,
+                    'modelStateDict': net.state_dict(),
+                    'trainLoss': trainLoss,
+                    'aveTrainError': aveTrainError,
+                    'testLoss': testLoss,
+                    'aveTestError': aveTestError,
+                }, os.path.join(visualizer.path, 'checkpoint.pt'))
 
-            torch.save({
-                'epoch': epoch,
-                'modelStateDict': net.state_dict(),
-                'trainLoss': trainLoss,
-                'aveTrainError': aveTrainError,
-                'testLoss': testLoss,
-                'aveTestError': aveTestError,
-            }, os.path.join(visualizer.path, 'checkpoint.pt'))
-
-        print("Finished training")
+            print("Finished training")
 

@@ -75,27 +75,6 @@ class Data_Loader(DataLoader):
                     )
                 )
 
-            elif self.dataset == 'FashionMNIST':
-                return (
-                    DataLoader(
-                        datasets.FashionMNIST(
-                            root='./data', train=True, download=True,
-                            transform=transforms.Compose(self.fcTransforms),
-                            target_transform=ReshapeTransformTargetFC(10, self.expandOutput, self.maxIntState)
-                        ),
-                        shuffle=True, batch_size=self.trainBatchSize, num_workers=10, pin_memory=True
-                    ),
-
-                    DataLoader(
-                        datasets.FashionMNIST(
-                            root='./data', train=False, download=True,
-                            transform=transforms.Compose(self.fcTransforms),
-                            target_transform=ReshapeTransformTargetFC(10, self.expandOutput, self.maxIntState)
-                        ),
-                        shuffle=True, batch_size=self.testBatchSize, num_workers=10, pin_memory=True
-                    )
-                )
-
         elif self.archi == 'conv':
             if self.dataset == 'MNIST':
                 transform = [transforms.ToTensor()]
@@ -107,7 +86,7 @@ class Data_Loader(DataLoader):
                             transform=transforms.Compose(transform),
                             target_transform=ReshapeTransformTargetConv(10, self.expandOutput)
                         ),
-                        batch_size=self.trainBatchSize, shuffle=True, num_workers=10, pin_memory=True
+                        batch_size=self.trainBatchSize, shuffle=True, num_workers=1, pin_memory=True
                     ),
 
                     DataLoader(
@@ -116,7 +95,7 @@ class Data_Loader(DataLoader):
                             transform=transforms.Compose(transform),
                             target_transform=ReshapeTransformTargetConv(10, self.expandOutput)
                         ),
-                        batch_size=self.testBatchSize, shuffle=True, num_workers=10, pin_memory=True
+                        batch_size=self.testBatchSize, shuffle=True, num_workers=1, pin_memory=True
                     )
                 )
 
